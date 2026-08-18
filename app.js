@@ -1,4 +1,27 @@
 const SHEET_URL = "https://docs.google.com/spreadsheets/d/1x_Kh3BFTKyPbOROTVhJjXCurGtGAq78nZQFckgYVeZc/export?format=xlsx";
+const OXFORD_TERMS = [
+  { name: "Michaelmas", zeroWeekStart: "2026-10-04", start: "2026-10-11", end: "2026-12-05" },
+  { name: "Hilary", zeroWeekStart: "2027-01-10", start: "2027-01-17", end: "2027-03-13" },
+  { name: "Trinity", zeroWeekStart: "2027-04-18", start: "2027-04-25", end: "2027-06-19" },
+  { name: "Michaelmas", zeroWeekStart: "2027-10-03", start: "2027-10-10", end: "2027-12-04" },
+  { name: "Hilary", zeroWeekStart: "2028-01-09", start: "2028-01-16", end: "2028-03-11" },
+  { name: "Trinity", zeroWeekStart: "2028-04-16", start: "2028-04-23", end: "2028-06-17" },
+  { name: "Michaelmas", zeroWeekStart: "2028-10-01", start: "2028-10-08", end: "2028-12-02" },
+  { name: "Hilary", zeroWeekStart: "2029-01-07", start: "2029-01-14", end: "2029-03-10" },
+  { name: "Trinity", zeroWeekStart: "2029-04-15", start: "2029-04-22", end: "2029-06-16" },
+  { name: "Michaelmas", zeroWeekStart: "2029-09-30", start: "2029-10-07", end: "2029-12-01" },
+  { name: "Hilary", zeroWeekStart: "2030-01-06", start: "2030-01-13", end: "2030-03-09" },
+  { name: "Trinity", zeroWeekStart: "2030-04-21", start: "2030-04-28", end: "2030-06-22" },
+  { name: "Michaelmas", zeroWeekStart: "2030-10-06", start: "2030-10-13", end: "2030-12-07" },
+  { name: "Hilary", zeroWeekStart: "2031-01-12", start: "2031-01-19", end: "2031-03-15" },
+  { name: "Trinity", zeroWeekStart: "2031-04-20", start: "2031-04-27", end: "2031-06-21" },
+  { name: "Michaelmas", zeroWeekStart: "2031-10-05", start: "2031-10-12", end: "2031-12-06" },
+  { name: "Hilary", zeroWeekStart: "2032-01-11", start: "2032-01-18", end: "2032-03-13" },
+  { name: "Trinity", zeroWeekStart: "2032-04-18", start: "2032-04-25", end: "2032-06-19" },
+  { name: "Michaelmas", zeroWeekStart: "2032-10-03", start: "2032-10-10", end: "2032-12-04" },
+  { name: "Hilary", zeroWeekStart: "2033-01-09", start: "2033-01-16", end: "2033-03-12" },
+  { name: "Trinity", zeroWeekStart: "2033-04-17", start: "2033-04-24", end: "2033-06-18" }
+];
 const fallbackEvents = [{
   name: "Jungle is massive",
   promoter: "OUEMS",
@@ -31,7 +54,9 @@ const elements = {
   startMode: document.querySelector("#start-time-mode"),
   startTime: document.querySelector("#start-time"),
   endMode: document.querySelector("#end-time-mode"),
-  endTime: document.querySelector("#end-time")
+  endTime: document.querySelector("#end-time"),
+  eventDialog: document.querySelector("#event-dialog"),
+  eventDialogContent: document.querySelector("#event-dialog-content")
 };
 const customSelects = new Map();
 
@@ -243,6 +268,23 @@ function displayMonth(date) {
   return new Intl.DateTimeFormat("en-GB", { month: "long", year: "numeric" }).format(date);
 }
 
+function oxfordTermForDate(dateKey) {
+  return OXFORD_TERMS.find((term) => dateKey >= term.zeroWeekStart && dateKey <= term.end) || null;
+}
+
+function oxfordTermForMonth(year, month) {
+  const monthStart = `${year}-${String(month + 1).padStart(2, "0")}-01`;
+  const monthEnd = `${year}-${String(month + 1).padStart(2, "0")}-${String(new Date(year, month + 1, 0).getDate()).padStart(2, "0")}`;
+  return OXFORD_TERMS.find((term) => term.zeroWeekStart <= monthEnd && term.end >= monthStart) || null;
+}
+
+function oxfordWeekLabel(dateKey, day) {
+  const term = oxfordTermForDate(dateKey);
+  if (!term) return String(day);
+  const daysSinceZeroWeek = Math.round((new Date(`${dateKey}T12:00:00`) - new Date(`${term.zeroWeekStart}T12:00:00`)) / 86400000);
+  return `wk${Math.floor(daysSinceZeroWeek / 7)} // ${day}`;
+}
+
 function lineupList(value) {
   return String(value || "Lineup TBA").split(/\r?\n|[,;]+/).map((artist) => artist.trim()).filter(Boolean).map((artist) => `<span>${artist}</span>`).join("");
 }
@@ -338,8 +380,8 @@ function syncCardSizing(card) {
   }
 }
 
-function setupCardSizing() {
-  elements.cards.querySelectorAll(".event-card").forEach((card) => {
+function setupCardSizing(container = elements.cards) {
+  container.querySelectorAll(".event-card").forEach((card) => {
     const poster = card.querySelector(".event-image img");
     const sync = () => requestAnimationFrame(() => syncCardSizing(card));
     poster?.addEventListener("load", sync, { once: true });
@@ -382,12 +424,27 @@ function renderCalendar() {
     const dateKey = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
     const dayEvents = state.filtered.filter((event) => event.date === dateKey);
     const isToday = today.getFullYear() === year && today.getMonth() === month && today.getDate() === day;
-    cells += `<div class="calendar-day current${isToday ? " today" : ""}"><span class="day-number">${day}</span>${dayEvents.map((event) => `<span class="calendar-event"><strong>${event.name}</strong><span>${event.time || "Time TBA"} / ${event.genre}</span></span>`).join("")}</div>`;
+    cells += `<div class="calendar-day current${isToday ? " today" : ""}"><span class="day-number">${oxfordWeekLabel(dateKey, day)}</span>${dayEvents.map((event) => { const eventIndex = state.filtered.indexOf(event); const titleClass = /\s/.test(event.name.trim()) ? "" : " calendar-event-title-single"; return `<button class="calendar-event" type="button" data-event-index="${eventIndex}" aria-label="Open details for ${event.name}"><strong class="calendar-event-title${titleClass}">${event.name}</strong><span>${organizerParts(event.promoter).join(" / ") || "Organizer TBA"}</span><span>${eventTime(event)}</span><span>${event.genre || "Genre TBA"}</span></button>`; }).join("")}</div>`;
   }
   let renderedCells = offset + daysInMonth;
   while (renderedCells % 7 !== 0) { cells += '<div class="calendar-day"></div>'; renderedCells += 1; }
-  elements.calendar.innerHTML = `<div class="calendar-toolbar"><h3>${displayMonth(new Date(year, month, 1))}</h3><div class="calendar-actions"><button class="icon-button" type="button" data-month="previous" aria-label="Previous month"><i data-lucide="chevron-left"></i></button><button class="icon-button" type="button" data-month="next" aria-label="Next month"><i data-lucide="chevron-right"></i></button></div></div><div class="calendar-weekdays"><div>Mon</div><div>Tue</div><div>Wed</div><div>Thu</div><div>Fri</div><div>Sat</div><div>Sun</div></div><div class="calendar-grid">${cells}</div>`;
+  const term = oxfordTermForMonth(year, month);
+  elements.calendar.innerHTML = `<div class="calendar-toolbar"><h3>${displayMonth(new Date(year, month, 1))}${term ? ` // ${term.name}` : ""}</h3><div class="calendar-actions"><button class="icon-button" type="button" data-month="previous" aria-label="Previous month"><i data-lucide="chevron-left"></i></button><button class="icon-button" type="button" data-month="next" aria-label="Next month"><i data-lucide="chevron-right"></i></button></div></div><div class="calendar-weekdays"><div>Mon</div><div>Tue</div><div>Wed</div><div>Thu</div><div>Fri</div><div>Sat</div><div>Sun</div></div><div class="calendar-grid">${cells}</div>`;
+  elements.calendar.querySelectorAll(".calendar-event").forEach((button) => button.addEventListener("click", () => openEventDialog(state.filtered[Number(button.dataset.eventIndex)])));
   elements.calendar.querySelectorAll("[data-month]").forEach((button) => button.addEventListener("click", () => { state.month.setMonth(state.month.getMonth() + (button.dataset.month === "next" ? 1 : -1)); renderCalendar(); window.lucide?.createIcons(); }));
+}
+
+function openEventDialog(event) {
+  if (!event) return;
+  elements.eventDialogContent.innerHTML = renderCard(event, 0);
+  elements.eventDialogContent.querySelector("h3")?.setAttribute("id", "event-dialog-title");
+  elements.eventDialog.showModal();
+  window.lucide?.createIcons();
+  setupCardSizing(elements.eventDialogContent);
+}
+
+function closeEventDialog() {
+  if (elements.eventDialog.open) elements.eventDialog.close();
 }
 
 function applyFilters() {
@@ -506,6 +563,8 @@ elements.activeFilters.addEventListener("click", (event) => {
   const button = event.target.closest("[data-remove-filter]");
   if (button) removeFilter(button.dataset.removeFilter);
 });
+elements.eventDialog.querySelector(".event-dialog-close").addEventListener("click", closeEventDialog);
+elements.eventDialog.addEventListener("click", (event) => { if (event.target === elements.eventDialog) closeEventDialog(); });
 elements.filterToggle.addEventListener("click", () => {
   closeCustomSelects();
   const isOpening = elements.filterMenu.hidden;
