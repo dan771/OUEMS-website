@@ -1,6 +1,4 @@
 const SHEET_URL = "https://docs.google.com/spreadsheets/d/1x_Kh3BFTKyPbOROTVhJjXCurGtGAq78nZQFckgYVeZc/export?format=xlsx";
-const LOGO_URL = "art/OUEMS original logo.jpg";
-
 const fallbackEvents = [{
   name: "Jungle is massive",
   promoter: "OUEMS",
@@ -11,8 +9,8 @@ const fallbackEvents = [{
   duration: "5 hours",
   cost: "£5-10",
   genre: "jungle",
-  photo: LOGO_URL,
-  photoSource: LOGO_URL
+  photo: "",
+  photoSource: ""
 }];
 
 const state = { events: [], filtered: [], selectedGenres: new Set(), selectedOrganizers: new Set(), organizerLabels: new Map(), view: "cards", month: null };
@@ -127,7 +125,7 @@ function driveImageSource(value) {
   const text = String(value || "").trim();
   const match = text.match(/(?:id=|\/d\/)([a-zA-Z0-9_-]+)/);
   const id = match?.[1] || (/^[a-zA-Z0-9_-]{20,}$/.test(text) ? text : "");
-  return id ? `https://drive.google.com/uc?export=view&id=${id}` : text || LOGO_URL;
+  return id ? `https://drive.google.com/uc?export=view&id=${id}` : text;
 }
 
 function driveImageUrl(value) {
@@ -316,12 +314,48 @@ function closeFilterMenu() {
   elements.filterToggle.setAttribute("aria-expanded", "false");
 }
 
+function syncCardSizing(card) {
+  const image = card.querySelector(".event-image");
+  const poster = image?.querySelector("img");
+  const content = card.querySelector(".event-content");
+  const description = card.querySelector(".event-description");
+  if (!image || !content || !description || !window.matchMedia("(min-width: 761px)").matches || !poster) {
+    content?.style.removeProperty("height");
+    description?.style.removeProperty("-webkit-line-clamp");
+    description?.style.removeProperty("line-clamp");
+    return;
+  }
+  const imageHeight = image.getBoundingClientRect().height;
+  if (!imageHeight) return;
+  content.style.height = `${imageHeight}px`;
+  description.style.removeProperty("-webkit-line-clamp");
+  description.style.removeProperty("line-clamp");
+  const lineHeight = Number.parseFloat(getComputedStyle(description).lineHeight);
+  if (description.scrollHeight > description.clientHeight + 1 && lineHeight > 0) {
+    const lines = String(Math.max(1, Math.floor(description.clientHeight / lineHeight)));
+    description.style.webkitLineClamp = lines;
+    description.style.lineClamp = lines;
+  }
+}
+
+function setupCardSizing() {
+  elements.cards.querySelectorAll(".event-card").forEach((card) => {
+    const poster = card.querySelector(".event-image img");
+    const sync = () => requestAnimationFrame(() => syncCardSizing(card));
+    poster?.addEventListener("load", sync, { once: true });
+    if (poster?.complete) sync();
+    if (window.ResizeObserver) new ResizeObserver(sync).observe(card.querySelector(".event-image"));
+    sync();
+  });
+}
+
 function renderCard(event, index) {
   const date = new Date(`${event.date}T12:00:00`);
   const day = new Intl.DateTimeFormat("en-GB", { day: "2-digit" }).format(date);
   const month = new Intl.DateTimeFormat("en-GB", { month: "short" }).format(date);
+  const image = event.photo ? `<img src="${event.photo}" alt="${event.name} event poster" loading="${index === 0 ? "eager" : "lazy"}">` : "";
   return `<article class="event-card" style="animation-delay: ${index * 70}ms">
-    <div class="event-image"><img src="${event.photo}" data-spreadsheet-poster="${event.photoSource || event.photo}" data-poster-fallback="${LOGO_URL}" alt="${event.name} event poster" loading="${index === 0 ? "eager" : "lazy"}"></div>
+    <div class="event-image">${image}</div>
     <div class="event-content"><h3>${event.name}</h3><div class="event-meta"><span><i data-lucide="clock-3" aria-hidden="true"></i>${eventTime(event)}</span><span><i data-lucide="ticket" aria-hidden="true"></i>${event.cost}</span></div><div class="event-lineup"><div class="lineup-list">${lineupList(event.lineup)}</div></div><p class="event-description">${event.description}</p><div class="event-footer"><span class="event-footer-date">${displayDate(event.date)}</span><span class="event-footer-genre">${event.genre}</span><span class="event-footer-promoter" title="${event.promoter}">${organizerParts(event.promoter).join(" / ")}</span></div></div>
   </article>`;
 }
@@ -329,14 +363,8 @@ function renderCard(event, index) {
 function renderCards() {
   elements.count.textContent = state.filtered.length;
   elements.cards.innerHTML = state.filtered.length ? state.filtered.map(renderCard).join("") : '<div class="empty-state">No events match that signal. Try another search.</div>';
-  elements.cards.querySelectorAll("img[data-spreadsheet-poster]").forEach((image) => {
-    const useFallback = () => {
-      if (!image.naturalWidth) image.src = image.dataset.posterFallback;
-    };
-    image.addEventListener("error", useFallback, { once: true });
-    setTimeout(useFallback, 5000);
-  });
   window.lucide?.createIcons();
+  setupCardSizing();
 }
 
 function renderCalendar() {
