@@ -108,13 +108,13 @@ kbd { min-width: 21px; padding: 2px 5px; border: 1px solid #41443e; color: var(-
 
 .cards-view { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; }
 .cards-view[hidden], .calendar-view[hidden] { display: none; }
-.event-card { min-height: 390px; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); border: 1px solid #30322f; background: var(--panel); overflow: hidden; animation: reveal .55s both; }
+.event-card { min-height: 330px; display: grid; grid-template-columns: minmax(250px, .72fr) minmax(0, 1.28fr); border: 1px solid #30322f; background: var(--panel); overflow: hidden; animation: reveal .55s both; }
 .event-image { position: relative; overflow: hidden; background: #1b1c1a; }
 .event-image::after { content: ""; position: absolute; inset: 0; background: linear-gradient(120deg, rgba(0,0,0,.05), rgba(0,0,0,.56)); }
 .event-image img { width: 100%; height: 100%; display: block; object-fit: cover; filter: contrast(1.08) saturate(1.08); transition: filter .4s ease, transform .6s ease; }
 .event-card:hover .event-image img { filter: contrast(1.04) saturate(1.16); transform: scale(1.04); }
 .event-content { min-width: 0; container-type: inline-size; display: flex; flex-direction: column; padding: 23px 24px 20px; }
-.event-card h3 { margin: 0 0 11px; font-family: "Archivo Black", sans-serif; font-size: clamp(28px, 10cqw, 58px); font-weight: 400; letter-spacing: -.04em; line-height: .95; text-transform: uppercase; overflow-wrap: normal; word-break: normal; }
+.event-card h3 { margin: 0 0 11px; font-family: "Archivo Black", sans-serif; font-size: clamp(22px, 6cqw, 34px); font-weight: 400; letter-spacing: -.04em; line-height: .95; text-transform: uppercase; overflow-wrap: normal; word-break: normal; }
 .event-meta { display: flex; flex-wrap: wrap; gap: 7px 15px; color: var(--muted); font-size: 11px; }
 .event-meta span { display: inline-flex; align-items: center; gap: 6px; }
 .event-meta svg { width: 13px; height: 13px; color: var(--acid); stroke-width: 1.7; }
@@ -173,8 +173,8 @@ kbd { min-width: 21px; padding: 2px 5px; border: 1px solid #41443e; color: var(-
   .date-range-control { min-height: 47px; }
   .controls-view-row .view-switch { min-height: 45px; }
   .view-button { flex: 1; justify-content: center; }
-  .event-card { grid-template-columns: 1fr; grid-template-rows: 220px auto; min-height: 0; }
-  .event-card h3 { font-size: clamp(28px, 10cqw, 40px); }
+  .event-card { grid-template-columns: 1fr; grid-template-rows: 175px auto; min-height: 0; }
+  .event-card h3 { font-size: clamp(22px, 7.5cqw, 30px); }
   .calendar-day { min-height: 90px; padding: 8px 5px; }
   .calendar-weekdays div { padding: 11px 5px; font-size: 8px; }
   .calendar-event { padding: 5px; }
