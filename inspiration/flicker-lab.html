@@ -1,0 +1,443 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OUEMS / Flicker Lab</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --acid: #d8ff3e;
+      --white: #f3f3ee;
+      --muted: #8c8f89;
+      --line: rgba(243, 243, 238, .22);
+      font-family: "Courier New", monospace;
+    }
+
+    * { box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background: #020202; color: var(--white); }
+    canvas { position: fixed; inset: 0; width: 100%; height: 100%; }
+    .glow-canvas { filter: blur(11px); opacity: .72; }
+    .lab-ui { position: fixed; z-index: 2; inset: 0; display: flex; flex-direction: column; padding: 24px; pointer-events: none; }
+    header, footer { display: flex; justify-content: space-between; align-items: flex-start; gap: 24px; text-transform: uppercase; letter-spacing: .12em; text-shadow: 0 0 12px #000; }
+    header { font-size: 11px; }
+    header strong { color: var(--acid); font-weight: 400; }
+    header span:last-child { color: var(--muted); text-align: right; }
+    footer { position: absolute; right: 24px; bottom: 164px; left: 24px; align-items: end; font-size: 10px; }
+    footer p { margin: 0; color: var(--muted); line-height: 1.6; }
+    .readout { display: grid; gap: 7px; min-width: 160px; }
+    .readout b { color: var(--white); font-size: 18px; font-weight: 400; letter-spacing: .03em; }
+    .controls { position: absolute; right: 24px; bottom: 24px; left: 24px; display: grid; grid-template-columns: repeat(3, minmax(90px, 1fr)); gap: 8px; width: min(560px, calc(100vw - 48px)); margin: auto; padding: 9px; border: 1px solid var(--line); background: rgba(0, 0, 0, .46); backdrop-filter: blur(8px); pointer-events: auto; }
+    button, input { font: inherit; }
+    button { min-height: 34px; border: 1px solid var(--line); color: var(--muted); background: transparent; cursor: pointer; text-transform: uppercase; letter-spacing: .08em; font-size: 10px; }
+    button:hover { border-color: var(--acid); color: #080808; background: var(--acid); }
+    .sliders { display: grid; grid-template-columns: repeat(3, 1fr); grid-column: 1 / -1; gap: 14px; padding: 6px 4px 2px; }
+    label { display: grid; gap: 8px; color: var(--muted); font-size: 9px; text-transform: uppercase; letter-spacing: .1em; }
+    input[type="range"] { width: 100%; height: 2px; accent-color: var(--acid); cursor: ew-resize; }
+    .hint { color: var(--muted); }
+    @media (max-width: 620px) {
+      .lab-ui { padding: 16px; }
+      header, footer { font-size: 9px; }
+      header span:last-child { max-width: 130px; }
+      footer { right: 16px; bottom: 310px; left: 16px; }
+      .controls { right: 16px; bottom: 16px; left: 16px; width: calc(100vw - 32px); grid-template-columns: repeat(3, minmax(0, 1fr)); }
+      .sliders { grid-template-columns: 1fr; gap: 5px; }
+      .readout { min-width: 130px; }
+    }
+  </style>
+</head>
+<body>
+  <canvas id="trail-glow" class="glow-canvas" aria-hidden="true"></canvas>
+  <canvas id="flicker-canvas" aria-label="Animated flickering light artwork"></canvas>
+  <div class="lab-ui">
+    <header>
+      <strong>OUEMS / Flicker Lab</strong>
+      <span>Standalone visual study<br>not connected to the main page</span>
+    </header>
+
+    <div class="controls" aria-label="Artwork controls">
+      <div class="sliders">
+        <label>Speed <input id="speed" type="range" min="0" max="2" step=".01" value=".72"></label>
+        <label>Flicker <input id="flicker" type="range" min="0" max="1" step=".01" value=".68"></label>
+        <label>Density <input id="density" type="range" min="0" max="1" step=".01" value=".45"></label>
+      </div>
+      <button id="pause" type="button">Pause</button>
+      <button id="randomize" type="button">Randomize</button>
+      <button id="reset" type="button">Reset</button>
+    </div>
+
+    <footer>
+      <div class="readout"><span>Current study</span><b>TRAILS</b></div>
+      <p>Scroll accelerates<br>Space pauses / R randomizes</p>
+      <p class="hint">Persistent trails<br>inside a noisy black field</p>
+    </footer>
+  </div>
+
+  <script>
+    const $ = (selector) => document.querySelector(selector);
+    const canvas = $("#flicker-canvas");
+    const context = canvas.getContext("2d");
+    const glowCanvas = $("#trail-glow");
+    const glowContext = glowCanvas.getContext("2d");
+    const controls = { speed: $("#speed"), flicker: $("#flicker"), density: $("#density"), pause: $("#pause"), randomize: $("#randomize"), reset: $("#reset") };
+    const defaults = { speed: .72, flicker: .68, density: .45 };
+    const viewport = { width: window.innerWidth, height: window.innerHeight };
+    const coreColors = ["255,255,255", "216,255,62", "150,245,255"];
+    const glowColors = ["150,245,255", "216,255,62", "255,150,50", "255,90,210"];
+    const state = { ...defaults, paused: false, scrollBoost: 0, seed: Math.random() * 1000, lastTime: 0, elapsed: 0, trailCycle: -1, resetTrails: true, particles: [] };
+
+    function resizeCanvas() {
+      viewport.width = window.innerWidth;
+      viewport.height = window.innerHeight;
+      const ratio = Math.min(window.devicePixelRatio || 1, 2);
+      canvas.width = Math.floor(viewport.width * ratio);
+      canvas.height = Math.floor(viewport.height * ratio);
+      context.setTransform(ratio, 0, 0, ratio, 0, 0);
+      const glowRatio = Math.min(ratio * .5, 1);
+      glowCanvas.width = Math.floor(viewport.width * glowRatio);
+      glowCanvas.height = Math.floor(viewport.height * glowRatio);
+      glowContext.setTransform(glowRatio, 0, 0, glowRatio, 0, 0);
+      glowContext.clearRect(0, 0, viewport.width, viewport.height);
+    }
+
+    function randomValue(index, time) {
+      return (Math.sin(index * 12.9898 + time * 78.233 + state.seed * 4.137) * 43758.5453) % 1;
+    }
+
+    function flickerValue(time, index = 0) {
+      const slow = Math.sin(time * 8.2 + index * 2.1) * .5 + .5;
+      const pulse = Math.pow(Math.abs(Math.sin(time * 71 + index * 17.3)), 8);
+      return 1 - state.flicker * (.08 + slow * .16 + pulse * .76);
+    }
+
+    function paintBase(time) {
+      const { width, height } = viewport;
+      context.globalCompositeOperation = "source-over";
+      const cycle = Math.floor(time / 20);
+      const hardReset = state.resetTrails || cycle !== state.trailCycle;
+      state.trailCycle = cycle;
+      context.fillStyle = hardReset ? "#020202" : "rgba(2,2,2,.065)";
+      context.fillRect(0, 0, width, height);
+      context.globalCompositeOperation = "lighter";
+      const grainCount = Math.floor(width * height / 26000 * state.density);
+      context.fillStyle = "rgba(255,255,255,.08)";
+      for (let index = 0; index < grainCount; index += 1) {
+        const grain = randomValue(index, time);
+        const x = Math.abs(randomValue(index + 77, time)) * width;
+        const y = Math.abs(randomValue(index + 131, time)) * height;
+        if (grain > .56) context.fillRect(x, y, grain > .85 ? 2 : 1, 1);
+      }
+      const interferenceCount = 30 + Math.floor(state.density * 34);
+      for (let index = 0; index < interferenceCount; index += 1) {
+        const signalSeed = state.seed + index * 19.3;
+        const x = Math.abs(randomValue(index + 410, Math.floor(time * 7))) * width;
+        const y = Math.abs(randomValue(index + 470, Math.floor(time * 7))) * height;
+        const length = 10 + Math.abs(trailNoise(signalSeed + time * 2)) * 52;
+        const angle = Math.round(trailNoise(signalSeed + Math.floor(time * 5)) * 8) * Math.PI / 8;
+        const kink = trailNoise(signalSeed + time * 3) * 9;
+        context.strokeStyle = index % 7 === 0 ? "rgba(150,245,255,.09)" : index % 5 === 0 ? "rgba(216,255,62,.07)" : "rgba(255,255,255,.05)";
+        context.lineWidth = .35 + Math.abs(trailNoise(signalSeed)) * .45;
+        context.beginPath();
+        context.moveTo(x, y);
+        context.lineTo(x + Math.cos(angle) * length * .52 + Math.cos(angle + Math.PI / 2) * kink, y + Math.sin(angle) * length * .52 + Math.sin(angle + Math.PI / 2) * kink);
+        context.lineTo(x + Math.cos(angle) * length, y + Math.sin(angle) * length);
+        context.stroke();
+      }
+      state.resetTrails = false;
+      return hardReset;
+    }
+
+    function trailNoise(value) {
+      return Math.sin(value * 1.7 + Math.sin(value * .43) * 2.8) * .5 + Math.sin(value * .31) * .25;
+    }
+
+    function drawFractalBranch(startX, startY, angle, length, depth, alpha, seed, time) {
+      if (depth === 0 || length < 3) return;
+      const segments = 4;
+      let x = startX;
+      let y = startY;
+      let currentAngle = angle;
+      context.beginPath();
+      context.moveTo(x, y);
+      for (let segment = 1; segment <= segments; segment += 1) {
+        const progress = segment / segments;
+        currentAngle += trailNoise(Math.floor(time * 12) + seed * 2.3 + segment) * .42;
+        x += Math.cos(currentAngle) * length / segments;
+        y += Math.sin(currentAngle) * length / segments;
+        x += Math.cos(currentAngle + Math.PI / 2) * trailNoise(Math.floor(time * 8) + seed + segment) * progress * 9;
+        y += Math.sin(currentAngle + Math.PI / 2) * trailNoise(Math.floor(time * 8) + seed + segment) * progress * 9;
+        context.lineTo(x, y);
+      }
+      const hot = (Math.sin(time * 2.8 + seed) + 1) * .5;
+      context.strokeStyle = seed % 3 === 0 ? `rgba(216,255,62,${alpha * (.8 + hot * .2)})` : seed % 3 === 1 ? `rgba(255,173,40,${alpha * (.85 + hot * .15)})` : `rgba(255,255,255,${alpha})`;
+      context.lineWidth = Math.max(.45, depth * .48);
+      context.stroke();
+      if (depth <= 1) return;
+      const branchSpread = .52 + Math.abs(trailNoise(seed * 2.7 + Math.floor(time * 5))) * .42;
+      const branchLength = length * (.26 + Math.abs(trailNoise(seed + Math.floor(time * .1))) * .16);
+      drawFractalBranch(x, y, currentAngle - branchSpread, branchLength, depth - 1, alpha * .78, seed + 1.7, time);
+      drawFractalBranch(x, y, currentAngle + branchSpread, branchLength, depth - 1, alpha * .7, seed + 4.1, time);
+      if (state.density > .3 && depth > 2) drawFractalBranch(x, y, currentAngle + .08, branchLength * .64, depth - 2, alpha * .55, seed + 8.3, time);
+    }
+
+    function drawGlowBranch(targetContext, startX, startY, angle, length, depth, alpha, seed, time) {
+      if (depth === 0 || length < 5) return;
+      const segments = 4;
+      let x = startX;
+      let y = startY;
+      let currentAngle = angle;
+      targetContext.beginPath();
+      targetContext.moveTo(x, y);
+      for (let segment = 1; segment <= segments; segment += 1) {
+        const progress = segment / segments;
+        currentAngle += trailNoise(seed + segment * 2.7 + Math.floor(time * 9)) * (.38 + depth * .08);
+        const bend = trailNoise(seed * 1.3 + segment * 4.1 + Math.floor(time * 6)) * (7 + depth * 4) * progress;
+        x += Math.cos(currentAngle) * length / segments + Math.cos(currentAngle + Math.PI / 2) * bend;
+        y += Math.sin(currentAngle) * length / segments + Math.sin(currentAngle + Math.PI / 2) * bend;
+        targetContext.lineTo(x, y);
+      }
+      const color = glowColors[Math.floor(Math.abs(seed)) % glowColors.length];
+      targetContext.strokeStyle = `rgba(${color},${alpha})`;
+      targetContext.lineWidth = 2.2 + depth * 1.4 + Math.abs(trailNoise(seed + time * 2)) * 1.8;
+      targetContext.stroke();
+      if (depth <= 1) return;
+      const branchPoint = .42 + Math.abs(trailNoise(seed + time * 3.1)) * .4;
+      const branchX = startX + (x - startX) * branchPoint;
+      const branchY = startY + (y - startY) * branchPoint;
+      const spread = .55 + Math.abs(trailNoise(seed * 2.2 + time)) * .6;
+      const branchLength = length * (.32 + Math.abs(trailNoise(seed + 8.4)) * .16);
+      drawGlowBranch(targetContext, branchX, branchY, currentAngle - spread, branchLength, depth - 1, alpha * .66, seed + 4.7, time);
+      drawGlowBranch(targetContext, branchX, branchY, currentAngle + spread, branchLength * .8, depth - 1, alpha * .54, seed + 9.2, time);
+    }
+
+    function createParticle(index, width, height) {
+      const scale = Math.max(width, height);
+      const seed = state.seed + index * 13.17;
+      const angle = randomValue(index * 3.7 + 900, seed) * Math.PI * 2;
+      const speed = scale * (.08 + Math.abs(randomValue(index * 4.1 + 940, seed)) * .13);
+      const particle = {
+        x: Math.abs(randomValue(index * 5.3 + 971, seed)) * width,
+        y: Math.abs(randomValue(index * 7.1 + 1053, seed)) * height,
+        angle,
+        course: angle,
+        courseShift: 0,
+        nextCourseShift: .45 + Math.abs(randomValue(index * 7.3 + 1123, seed)) * .9,
+        speed,
+        sharpness: .65 + Math.abs(randomValue(index * 2.9 + 1187, seed)) * .8,
+        seed,
+        life: 0,
+        maxLife: 18 + Math.abs(randomValue(index * 8.4 + 1091, seed)) * 10,
+        history: []
+      };
+      particle.history.push({ x: particle.x, y: particle.y });
+      return particle;
+    }
+
+    function resetParticles(width, height) {
+      const placements = [[.1, .18, .48], [.9, .2, 2.68], [.46, .88, -1.18]];
+      state.particles = placements.map(([x, y, angle], index) => {
+        const particle = createParticle(index, width, height);
+        particle.x = width * x;
+        particle.y = height * y;
+        particle.angle = angle;
+        particle.course = angle;
+        particle.life = 1.2 + index * .35;
+        particle.history = [{ x: particle.x, y: particle.y }];
+        return particle;
+      });
+    }
+
+    function updateParticle(particle, time, delta, width, height) {
+      if (particle.life >= particle.nextCourseShift) {
+        particle.courseShift = Math.max(-.9, Math.min(.9, particle.courseShift + trailNoise(particle.seed + particle.life * 3.1) * .4));
+        particle.nextCourseShift += .45 + Math.abs(trailNoise(particle.seed + particle.life)) * .95;
+      }
+      const biteStep = Math.floor(time * (4 + particle.sharpness * 3));
+      const bite = trailNoise(particle.seed * 1.7 + biteStep) * (.42 + particle.sharpness * .58);
+      particle.angle = particle.course + particle.courseShift + bite;
+      const speedPulse = .72 + Math.pow(Math.abs(trailNoise(particle.seed * 2.9 + time * 4.6)), 2) * .7;
+      particle.x += Math.cos(particle.angle) * particle.speed * speedPulse * delta;
+      particle.y += Math.sin(particle.angle) * particle.speed * speedPulse * delta;
+      particle.life += delta;
+      particle.history.push({ x: particle.x, y: particle.y });
+      const historyLimit = 128 + Math.floor(state.density * 48);
+      if (particle.history.length > historyLimit) particle.history.shift();
+      const outside = particle.x < -80 || particle.x > width + 80 || particle.y < -80 || particle.y > height + 80;
+      if (outside || particle.life > particle.maxLife) {
+        const replacement = createParticle(Math.floor(Math.random() * 1000), width, height);
+        Object.assign(particle, replacement);
+      }
+    }
+
+    function drawParticle(particle, time) {
+      if (particle.history.length < 3) return;
+      const pulse = Math.pow(Math.abs(Math.sin(time * 36 + particle.seed)), 10);
+      const intensity = Math.max(.72, flickerValue(time, particle.seed)) * (.62 + Math.min(particle.life, 2) * .15) + pulse * .5;
+      const colorRoll = Math.abs(trailNoise(particle.seed * 2.1 + time * .15));
+      const color = colorRoll > .67 ? coreColors[2] : colorRoll > .35 ? coreColors[1] : coreColors[0];
+      context.lineJoin = "miter";
+      context.lineCap = "square";
+      const last = particle.history[particle.history.length - 1];
+      for (let point = 1; point < particle.history.length; point += 1) {
+        const age = point / (particle.history.length - 1);
+        const previous = particle.history[point - 1];
+        const current = particle.history[point];
+        const segmentSeed = particle.seed + point * 2.17;
+        const gap = Math.abs(trailNoise(segmentSeed + Math.floor(time * 12))) < .13;
+        if (gap) continue;
+        const segmentAngle = Math.atan2(current.y - previous.y, current.x - previous.x);
+        const segmentLength = Math.hypot(current.x - previous.x, current.y - previous.y);
+        const normal = trailNoise(segmentSeed + Math.floor(time * 7)) * (2.5 + particle.sharpness * 5) * age;
+        const split = .32 + Math.abs(trailNoise(segmentSeed + point)) * .32;
+        const midX = previous.x + (current.x - previous.x) * split + Math.cos(segmentAngle + Math.PI / 2) * normal;
+        const midY = previous.y + (current.y - previous.y) * split + Math.sin(segmentAngle + Math.PI / 2) * normal;
+        context.strokeStyle = `rgba(${color},${(.12 + age * .56) * intensity})`;
+        context.lineWidth = .34 + age * (.5 + particle.sharpness * .62 + Math.abs(trailNoise(segmentSeed + time)) * 1.05);
+        context.beginPath();
+        context.moveTo(previous.x, previous.y);
+        context.lineTo(midX, midY);
+        context.lineTo(current.x, current.y);
+        context.stroke();
+        if (segmentLength > 5 && point % 4 === 0) {
+          drawFractalBranch(midX, midY, segmentAngle + trailNoise(segmentSeed) * .9, 10 + segmentLength * 1.5, 2, .11 * intensity, segmentSeed, time);
+        }
+      }
+      const branchCount = 2 + Math.floor(Math.abs(trailNoise(particle.seed + time * .16)) * 2);
+      for (let branch = 0; branch < branchCount; branch += 1) {
+        const forkOffset = (branch - (branchCount - 1) / 2) * .64 + trailNoise(particle.seed + branch * 3.7 + time) * .28;
+        drawFractalBranch(last.x, last.y, particle.angle + forkOffset, 24 + Math.abs(trailNoise(particle.seed * 2.4 + branch + time)) * 46, 2, .22 * intensity, particle.seed + branch * 4.3 + time * .2, time);
+      }
+      for (let wake = particle.history.length - 7, wakeIndex = 0; wake > 5; wake -= 6, wakeIndex += 1) {
+        const origin = particle.history[wake];
+        const before = particle.history[wake - 3];
+        const wakeAngle = Math.atan2(origin.y - before.y, origin.x - before.x);
+        const wakeRoll = Math.abs(trailNoise(particle.seed + wakeIndex * 5.2 + Math.floor(time * 4)));
+        if (wakeRoll > .3) {
+          drawFractalBranch(origin.x, origin.y, wakeAngle + (wakeIndex % 2 ? -1 : 1) * (.55 + wakeRoll * .4), 14 + wakeRoll * 32, 2, .18 * intensity, particle.seed + wakeIndex * 9.1 + time * .2, time);
+        }
+      }
+      const headSize = 2 + Math.abs(trailNoise(particle.seed + time * 1.6)) * 3.8;
+      const artifactCount = 6 + Math.floor(Math.abs(trailNoise(particle.seed * 1.4 + time * 2.2)) * 8);
+      context.globalCompositeOperation = "lighter";
+      for (let artifact = 0; artifact < artifactCount; artifact += 1) {
+        const artifactSeed = particle.seed + artifact * 3.7;
+        const originIndex = Math.max(2, particle.history.length - 1 - (artifact % 6) * 4);
+        const origin = particle.history[originIndex];
+        const artifactAngle = particle.angle + trailNoise(artifactSeed + time * 4.5) * 2.4;
+        const artifactDistance = headSize * (1.8 + Math.abs(trailNoise(artifactSeed + time)) * 5.5);
+        const artifactX = origin.x + Math.cos(artifactAngle) * artifactDistance;
+        const artifactY = origin.y + Math.sin(artifactAngle) * artifactDistance;
+        const fragmentLength = 2 + Math.abs(trailNoise(artifactSeed * 1.6 + time * 3.2)) * 10;
+        context.strokeStyle = `rgba(${color},${.18 * intensity})`;
+        context.lineWidth = .35 + Math.abs(trailNoise(artifactSeed + time * 2.1)) * .8;
+        context.beginPath();
+        context.moveTo(artifactX, artifactY);
+        context.lineTo(artifactX + Math.cos(artifactAngle + .5) * fragmentLength, artifactY + Math.sin(artifactAngle + .5) * fragmentLength);
+        context.stroke();
+        if (artifact % 3 === 0) {
+          context.fillStyle = `rgba(${color},${.35 * intensity})`;
+          context.fillRect(artifactX - .7, artifactY - .7, 1.4, 1.4);
+        }
+      }
+      context.shadowBlur = 15 + headSize * 2.2 + pulse * 10;
+      context.shadowColor = `rgba(${color},${.8 * intensity})`;
+      context.fillStyle = `rgba(${color},${Math.min(1, .98 * intensity)})`;
+      context.save();
+      context.translate(last.x, last.y);
+      context.rotate(particle.angle);
+      context.fillRect(-headSize * 1.4, -headSize * .35, headSize * 2.8, headSize * .7);
+      context.restore();
+      context.shadowBlur = 0;
+    }
+
+    function drawTrailGlow(particle, time) {
+      if (particle.history.length < 3) return;
+      const pulse = Math.pow(Math.abs(Math.sin(time * 19 + particle.seed * 1.7)), 6);
+      const glow = .008 + pulse * .018 + state.density * .006;
+      const colorRoll = Math.abs(trailNoise(particle.seed * 1.9 + time * .11));
+      const color = glowColors[colorRoll > .67 ? 0 : colorRoll > .34 ? 1 : 2];
+      glowContext.globalCompositeOperation = "lighter";
+      glowContext.lineJoin = "miter";
+      glowContext.lineCap = "square";
+      glowContext.strokeStyle = `rgba(${color},${glow})`;
+      glowContext.lineWidth = 2.4 + pulse * 2.4;
+      glowContext.beginPath();
+      const first = particle.history[0];
+      glowContext.moveTo(first.x, first.y);
+      for (let point = 1; point < particle.history.length; point += 4) {
+        const previous = particle.history[point - 1];
+        const current = particle.history[point];
+        const segmentSeed = particle.seed + point * 1.83;
+        const angle = Math.atan2(current.y - previous.y, current.x - previous.x);
+        const warp = trailNoise(segmentSeed + Math.floor(time * 5)) * (4 + point / particle.history.length * 13);
+        glowContext.lineTo(current.x + Math.cos(angle + Math.PI / 2) * warp, current.y + Math.sin(angle + Math.PI / 2) * warp);
+      }
+      glowContext.stroke();
+      if (particle.history.length < 24 || pulse < .025) return;
+      const branchCount = 4 + Math.floor(state.density * 2);
+      for (let branch = 0; branch < branchCount; branch += 1) {
+        const availableHistory = Math.max(1, particle.history.length - 20);
+        const originIndex = Math.min(particle.history.length - 4, 10 + Math.floor(branch * availableHistory / Math.max(1, branchCount - 1)));
+        const origin = particle.history[originIndex];
+        const before = particle.history[Math.max(0, originIndex - 3)];
+        const wakeAngle = Math.atan2(origin.y - before.y, origin.x - before.x);
+        const branchSeed = particle.seed + branch * 17.4;
+        const branchFlash = Math.pow(Math.abs(Math.sin(time * 5.2 + branchSeed)), 14);
+        if (branchFlash < .025) continue;
+        drawGlowBranch(glowContext, origin.x, origin.y, wakeAngle + trailNoise(branchSeed + time * 1.8) * 1.7, 22 + Math.abs(trailNoise(branchSeed + time)) * 54, 2, (.018 + branchFlash * .18) * (1 + state.density * .35), branchSeed, time);
+      }
+    }
+
+    function drawTrails(time, delta, hardReset) {
+      const { width, height } = viewport;
+      if (!state.particles.length) resetParticles(width, height);
+      glowContext.globalCompositeOperation = "source-over";
+      if (hardReset) {
+        glowContext.clearRect(0, 0, width, height);
+      } else {
+        glowContext.fillStyle = "rgba(2,2,2,.24)";
+        glowContext.fillRect(0, 0, width, height);
+      }
+      context.globalCompositeOperation = "lighter";
+      for (const particle of state.particles) {
+        updateParticle(particle, time, delta, width, height);
+        drawTrailGlow(particle, time);
+        drawParticle(particle, time);
+      }
+    }
+
+    function drawFrame(timestamp) {
+      const seconds = timestamp / 1000;
+      if (!state.lastTime) state.lastTime = seconds;
+      const delta = Math.min(seconds - state.lastTime, .05);
+      state.lastTime = seconds;
+      state.scrollBoost = Math.max(0, state.scrollBoost - delta * 2.4);
+      const motionMultiplier = 1 + state.scrollBoost * 2.4;
+      if (!state.paused) state.elapsed += delta * state.speed * motionMultiplier;
+      const time = state.elapsed;
+      const hardReset = paintBase(time);
+      drawTrails(time, state.paused ? 0 : delta * motionMultiplier, hardReset);
+      requestAnimationFrame(drawFrame);
+    }
+
+    function randomize() {
+      state.seed = Math.random() * 1000;
+      state.particles = [];
+      state.scrollBoost = 0;
+      state.speed = Number(controls.speed.value = (.35 + Math.random() * 1.1).toFixed(2));
+      state.flicker = Number(controls.flicker.value = (.45 + Math.random() * .5).toFixed(2));
+      state.density = Number(controls.density.value = (.2 + Math.random() * .7).toFixed(2));
+    }
+
+    ["speed", "flicker", "density"].forEach((key) => controls[key].addEventListener("input", () => { state[key] = Number(controls[key].value); }));
+    controls.pause.addEventListener("click", () => { state.paused = !state.paused; controls.pause.textContent = state.paused ? "Resume" : "Pause"; });
+    controls.randomize.addEventListener("click", randomize);
+    controls.reset.addEventListener("click", () => { Object.assign(state, defaults, { seed: Math.random() * 1000, particles: [], scrollBoost: 0, trailCycle: -1, resetTrails: true }); Object.keys(defaults).forEach((key) => { controls[key].value = defaults[key]; }); });
+    window.addEventListener("resize", resizeCanvas);
+    window.addEventListener("wheel", (event) => { state.scrollBoost = Math.min(5, state.scrollBoost + Math.min(2.6, Math.abs(event.deltaY) * .012)); }, { passive: true });
+    window.addEventListener("keydown", (event) => { if (event.code === "Space") { event.preventDefault(); controls.pause.click(); } if (event.key.toLowerCase() === "r") randomize(); });
+    resizeCanvas();
+    requestAnimationFrame(drawFrame);
+  </script>
+</body>
+</html>

@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="What's on from Oxford University Electronic Music Society, established in 2018.">
+  <title>What's on | OUEMS</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body>
+  <canvas id="trail-background-glow" class="trail-background glow-layer" aria-hidden="true"></canvas>
+  <canvas id="trail-background" class="trail-background" aria-hidden="true"></canvas>
+  <div class="noise" aria-hidden="true"></div>
+
+  <main id="top">
+    <section class="events-section" id="events" aria-labelledby="events-title">
+      <div class="section-heading">
+        <div>
+          <div class="section-identity">
+            <img src="art/ouems-logo-transparent.png" alt="Oxford University Electronic Music Society logo">
+            <p>Oxford University Electronic Music Society / Est. 2018</p>
+          </div>
+          <p class="kicker"><span class="kicker-line"></span> Live programme</p>
+          <h2 id="events-title">What's<br><em>on</em><span class="period">.</span></h2>
+        </div>
+        <div class="event-count" aria-live="polite"><strong id="event-count">--</strong><span>events<br>indexed</span></div>
+      </div>
+
+      <div class="controls" aria-label="Event controls">
+        <div class="controls-view-row">
+          <div class="view-switch" role="group" aria-label="Change event view">
+            <button class="view-button is-active" type="button" data-view="cards" aria-label="Card view" aria-pressed="true"><i data-lucide="layout-grid"></i><span>Cards</span></button>
+            <button class="view-button" type="button" data-view="calendar" aria-label="Calendar view" aria-pressed="false"><i data-lucide="calendar-days"></i><span>Calendar</span></button>
+          </div>
+        </div>
+        <div class="controls-row controls-row-primary">
+          <label class="search-control">
+            <i data-lucide="search"></i>
+            <span class="sr-only">Search events</span>
+            <input id="search-input" type="search" placeholder="Search lineup, event, genre..." autocomplete="off">
+            <kbd>/</kbd>
+          </label>
+          <div class="filter-popover">
+            <button id="filter-toggle" class="filter-button" type="button" aria-expanded="false" aria-controls="filter-menu"><i data-lucide="sliders-horizontal"></i><span>Filter</span><strong id="filter-count" hidden></strong></button>
+            <div id="filter-menu" class="filter-menu" hidden>
+              <label class="select-control">
+                <span>Genre</span>
+                <select id="genre-filter" aria-label="Add genre filter">
+                  <option value="all">Add genre...</option>
+                </select>
+              </label>
+              <label class="select-control">
+                <span>Organizer</span>
+                <select id="organizer-filter" aria-label="Add organizer filter">
+                  <option value="all">Add organizer...</option>
+                </select>
+              </label>
+            </div>
+          </div>
+          <label class="select-control sort-control">
+            <span>Sort</span>
+            <select id="sort-select" aria-label="Sort events">
+              <option value="date">Date: soonest</option>
+              <option value="name">Name: A-Z</option>
+              <option value="genre">Genre: A-Z</option>
+            </select>
+          </label>
+        </div>
+        <div class="controls-row controls-row-secondary">
+          <div class="date-range-control">
+            <span>Date range</span>
+            <label>
+              <span class="sr-only">Date from</span>
+              <input id="date-from" type="date" aria-label="Filter from date">
+            </label>
+            <span class="date-range-separator" aria-hidden="true">to</span>
+            <label>
+              <span class="sr-only">Date to</span>
+              <input id="date-to" type="date" aria-label="Filter to date">
+            </label>
+          </div>
+          <label class="input-control">
+            <span>Start</span>
+            <select id="start-time-mode" aria-label="Start time filter direction">
+              <option value="after">After</option>
+              <option value="before">Before</option>
+            </select>
+            <input id="start-time" type="time" aria-label="Filter event start time">
+          </label>
+          <label class="input-control">
+            <span>End</span>
+            <select id="end-time-mode" aria-label="End time filter direction">
+              <option value="after">After</option>
+              <option value="before">Before</option>
+            </select>
+            <input id="end-time" type="time" aria-label="Filter event end time">
+          </label>
+        </div>
+        <div id="active-filters" class="active-filters" hidden aria-label="Active filters"></div>
+      </div>
+
+      <div class="data-note"><a href="https://docs.google.com/spreadsheets/d/1x_Kh3BFTKyPbOROTVhJjXCurGtGAq78nZQFckgYVeZc/edit?usp=sharing" target="_blank" rel="noreferrer">Submit an event <i data-lucide="arrow-up-right"></i></a></div>
+
+      <div id="cards-view" class="cards-view" aria-live="polite"></div>
+      <div id="calendar-view" class="calendar-view" hidden aria-live="polite"></div>
+    </section>
+
+    <section class="about-section" id="about" aria-labelledby="about-title">
+      <div>
+        <h2 id="about-title">Supporting<br><em>grassroots.</em></h2>
+        <p>OUEMS brings Oxford's electronic music community together, widening access, championing underrepresented artists and reinvesting in a fair, sustainable grassroots scene.</p>
+      </div>
+      <div class="about-details"><img class="about-logo" src="art/ouems-logo-transparent.png" alt="OUEMS logo"><span>Oxford, UK / Est. 2018</span></div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <span>Oxford University Electronic Music Society</span>
+    <span>Oxford, UK / Est. 2018</span>
+  </footer>
+
+  <script src="app.js"></script>
+  <script src="trails-background.js"></script>
+</body>
+</html>
