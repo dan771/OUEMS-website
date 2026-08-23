@@ -229,7 +229,7 @@ function normalizeRows(rows) {
     date: excelDate(row[index.date]),
     time: excelTime(row[index.time]),
     endTime: excelTime(row[index.endTime]),
-    cost: row[index.cost] || "Free / TBA",
+    cost: costLabel(row[index.cost]),
     genre: row[index.genre] || "electronic",
     venue: row[index.venue] || "Venue TBA",
     ticketUrl: row[index.ticketUrl] || "",
@@ -284,6 +284,10 @@ function organizerParts(value) {
 
 function organizerKey(value) {
   return String(value || "").trim().toLowerCase();
+}
+
+function costLabel(value) {
+  return String(value ?? "").trim() === "0" ? "Free" : value || "Free / TBA";
 }
 
 function ticketUrl(value) {
@@ -424,7 +428,7 @@ function renderCards() {
   elements.cards.querySelectorAll("[data-ticket-index]").forEach((card) => {
     const openTickets = () => {
       const event = state.filtered[Number(card.dataset.ticketIndex)];
-      const url = ticketUrl(event?.ticketUrl);
+      const url = eventAction(event)?.url;
       if (url) window.open(url, "_blank", "noopener,noreferrer");
     };
     card.addEventListener("click", (event) => { if (!event.target.closest("a, button")) openTickets(); });
