@@ -566,14 +566,13 @@ function removeFilter(key) {
 
 async function loadEvents() {
   state.events = [];
-  state.month = null;
+  state.month = new Date();
   try {
     const response = await fetch(SHEET_URL);
     if (!response.ok) throw new Error(`Sheet request failed: ${response.status}`);
     const workbook = XLSX.read(await response.arrayBuffer(), { type: "array" });
     const rows = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], { header: 1, defval: "", raw: true });
     state.events = normalizeRows(rows);
-    state.month = state.events.length ? new Date(`${state.events[0].date}T12:00:00`) : null;
   } catch (error) {}
   fillGenres();
   fillOrganizers();
