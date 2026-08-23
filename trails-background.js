@@ -1,7 +1,7 @@
 (() => {
   const canvas = document.querySelector("#trail-background");
   const glowCanvas = document.querySelector("#trail-background-glow");
-  if (!canvas || !glowCanvas) return;
+  if (!canvas || !glowCanvas || matchMedia("(prefers-reduced-motion: reduce)").matches) return;
 
   const context = canvas.getContext("2d");
   const glowContext = glowCanvas.getContext("2d");

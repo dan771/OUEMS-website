@@ -8,9 +8,12 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css">
+  <link id="site-styles" rel="stylesheet" href="styles.css">
+  <script>
+    document.querySelector("#site-styles").href = `styles.css?v=${Date.now()}`;
+  </script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="https://unpkg.com/lucide@latest"></script>
+  <script src="https://unpkg.com/lucide@0.468.0"></script>
 </head>
 <body>
   <canvas id="trail-background-glow" class="trail-background glow-layer" aria-hidden="true"></canvas>
@@ -139,7 +142,24 @@
     <span>Oxford, UK / Est. 2018</span>
   </footer>
 
-  <script src="app.js"></script>
-  <script src="trails-background.js"></script>
+  <script>
+    const assetVersion = Date.now();
+    const showAssetError = (source) => {
+      if (source !== "app.js") return;
+      const message = document.createElement("div");
+      message.className = "empty-state";
+      message.textContent = "Unable to load the event programme. Please reload the page.";
+      document.querySelector("#cards-view").replaceChildren(message);
+      document.querySelector("#event-count").textContent = "0";
+    };
+    const loadScript = (source, next) => {
+      const script = document.createElement("script");
+      script.src = `${source}?v=${assetVersion}`;
+      script.onload = next;
+      script.onerror = () => { console.error(`Unable to load ${source}`); showAssetError(source); };
+      document.body.append(script);
+    };
+    loadScript("app.js", () => loadScript("trails-background.js"));
+  </script>
 </body>
 </html>

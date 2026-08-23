@@ -1,4 +1,5 @@
 const SHEET_URL = "https://docs.google.com/spreadsheets/d/1x_Kh3BFTKyPbOROTVhJjXCurGtGAq78nZQFckgYVeZc/export?format=xlsx";
+const EVENT_CACHE_KEY = "ouems-events-cache-v1";
 const OXFORD_TERMS = [
   { name: "Michaelmas", zeroWeekStart: "2026-10-04", start: "2026-10-11", end: "2026-12-05" },
   { name: "Hilary", zeroWeekStart: "2027-01-10", start: "2027-01-17", end: "2027-03-13" },
@@ -22,7 +23,7 @@ const OXFORD_TERMS = [
   { name: "Hilary", zeroWeekStart: "2033-01-09", start: "2033-01-16", end: "2033-03-12" },
   { name: "Trinity", zeroWeekStart: "2033-04-17", start: "2033-04-24", end: "2033-06-18" }
 ];
-const state = { events: [], filtered: [], selectedGenres: new Set(), selectedOrganizers: new Set(), selectedVenues: new Set(), organizerLabels: new Map(), venueLabels: new Map(), view: "cards", month: null };
+const state = { events: [], filtered: [], selectedGenres: new Set(), selectedOrganizers: new Set(), selectedVenues: new Set(), organizerLabels: new Map(), venueLabels: new Map(), loadError: false, view: "cards", month: null };
 const elements = {
   cards: document.querySelector("#cards-view"),
   calendar: document.querySelector("#calendar-view"),
@@ -198,17 +199,24 @@ function excelTime(value) {
 }
 
 function headerIndex(headers, label) {
+  const labels = Array.isArray(label) ? label : [label];
   const normalized = headers.map((header) => String(header).toLowerCase().trim());
-  const exact = normalized.findIndex((header) => header === label);
-  return exact >= 0 ? exact : normalized.findIndex((header) => header.includes(label));
+  const exact = normalized.findIndex((header) => labels.includes(header));
+  if (exact >= 0) return exact;
+  return normalized.findIndex((header) => labels.some((candidate) => header.includes(candidate)));
+}
+
+function rowValue(row, index, fallback = "") {
+  return index >= 0 && row[index] !== undefined && row[index] !== null ? row[index] : fallback;
 }
 
 function normalizeRows(rows) {
+  if (!rows.length) return [];
   const headers = rows[0].map((header) => String(header).trim());
   const index = {
     name: headerIndex(headers, "name of event"),
     promoter: headerIndex(headers, "organization"),
-    description: headerIndex(headers, "desciption"),
+    description: headerIndex(headers, ["description", "desciption"]),
     lineup: headerIndex(headers, "lineup"),
     date: headerIndex(headers, "date"),
     time: headerIndex(headers, "start time"),
@@ -222,23 +230,26 @@ function normalizeRows(rows) {
     signupUrl: headerIndex(headers, "sign up link"),
     accepted: headerIndex(headers, "accepted")
   };
-  return rows.slice(1).filter((row) => row[index.name] && String(row[index.accepted] || "").trim().toLowerCase() === "yes").map((row) => ({
-    name: row[index.name] || "Untitled transmission",
-    promoter: row[index.promoter] || "OUEMS",
-    description: row[index.description] || "An OUEMS electronic music event.",
-    lineup: row[index.lineup] || "Lineup TBA",
-    date: excelDate(row[index.date]),
-    time: excelTime(row[index.time]),
-    endTime: excelTime(row[index.endTime]),
-    cost: costLabel(row[index.cost]),
-    genre: row[index.genre] || "electronic",
-    venue: row[index.venue] || "Venue TBA",
-    ticketUrl: row[index.ticketUrl] || "",
-    minimumAge: row[index.minimumAge] ?? "",
-    signupUrl: row[index.signupUrl] || "",
-    accepted: row[index.accepted] || "",
-    photo: driveImageUrl(row[index.photo]),
-    photoSource: driveImageSource(row[index.photo])
+  const requiredColumns = ["name", "date", "time", "accepted"];
+  const missingColumns = requiredColumns.filter((key) => index[key] < 0);
+  if (missingColumns.length) throw new Error(`Missing required sheet columns: ${missingColumns.join(", ")}`);
+  return rows.slice(1).filter((row) => rowValue(row, index.name) && String(rowValue(row, index.accepted)).trim().toLowerCase() === "yes").map((row) => ({
+    name: rowValue(row, index.name, "Untitled transmission"),
+    promoter: rowValue(row, index.promoter, "OUEMS"),
+    description: rowValue(row, index.description, "An OUEMS electronic music event."),
+    lineup: rowValue(row, index.lineup, "Lineup TBA"),
+    date: excelDate(rowValue(row, index.date)),
+    time: excelTime(rowValue(row, index.time)),
+    endTime: excelTime(rowValue(row, index.endTime)),
+    cost: costLabel(rowValue(row, index.cost)),
+    genre: rowValue(row, index.genre, "electronic"),
+    venue: rowValue(row, index.venue, "Venue TBA"),
+    ticketUrl: rowValue(row, index.ticketUrl),
+    minimumAge: rowValue(row, index.minimumAge),
+    signupUrl: rowValue(row, index.signupUrl),
+    accepted: rowValue(row, index.accepted),
+    photo: driveImageUrl(rowValue(row, index.photo)),
+    photoSource: driveImageSource(rowValue(row, index.photo))
   }));
 }
 
@@ -268,7 +279,7 @@ function oxfordWeekLabel(dateKey, day) {
 }
 
 function lineupList(value) {
-  return String(value || "Lineup TBA").split(/\r?\n|[,;]+/).map((artist) => artist.trim()).filter(Boolean).map((artist) => `<span>${artist}</span>`).join("");
+  return String(value || "Lineup TBA").split(/\r?\n|[,;]+/).map((artist) => artist.trim()).filter(Boolean).map((artist) => `<span>${escapeHtml(artist)}</span>`).join("");
 }
 
 function eventGenres(value) {
@@ -288,7 +299,8 @@ function organizerKey(value) {
 }
 
 function costLabel(value) {
-  return String(value ?? "").trim() === "0" ? "Free" : value || "Free / TBA";
+  const text = String(value ?? "").trim();
+  return text && Number(text) === 0 ? "Free" : text || "Free / TBA";
 }
 
 function ticketUrl(value) {
@@ -302,8 +314,12 @@ function ticketUrl(value) {
   }
 }
 
+function escapeHtml(value) {
+  return String(value ?? "").replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[character]));
+}
+
 function escapeAttribute(value) {
-  return String(value).replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[character]));
+  return escapeHtml(value);
 }
 
 function minimumAgeLabel(value) {
@@ -314,31 +330,67 @@ function minimumAgeLabel(value) {
 }
 
 function eventAction(event) {
+  if (!event) return null;
   const signup = ticketUrl(event.signupUrl);
   if (signup) return { url: signup, label: "Sign up", icon: "clipboard-pen-line" };
   const tickets = ticketUrl(event.ticketUrl);
   return tickets ? { url: tickets, label: "Tickets", icon: "ticket" } : null;
 }
 
+function readEventCache() {
+  try {
+    const cached = JSON.parse(localStorage.getItem(EVENT_CACHE_KEY) || "null");
+    if (!cached || !Array.isArray(cached.events) || !cached.events.every((event) => event && typeof event.name === "string" && typeof event.date === "string" && typeof event.time === "string")) return null;
+    return cached.events;
+  } catch (error) {
+    return null;
+  }
+}
+
+function writeEventCache(events) {
+  try {
+    localStorage.setItem(EVENT_CACHE_KEY, JSON.stringify({ events }));
+  } catch (error) {
+    console.warn("Unable to cache events", error);
+  }
+}
+
+function applyEvents(events) {
+  state.events = events;
+  state.loadError = false;
+  fillGenres();
+  fillOrganizers();
+  fillVenues();
+  applyFilters();
+}
+
 function updateGenreOptions() {
-  [...elements.genre.options].forEach((option) => {
-    option.disabled = option.value !== "all" && state.selectedGenres.has(option.value);
-  });
-  refreshCustomSelect(elements.genre);
+  const values = new Set(state.events.flatMap((event) => eventGenres(event.genre)));
+  retainKnownValues(state.selectedGenres, values);
+  updateFilterOptions(elements.genre, state.selectedGenres);
 }
 
 function updateOrganizerOptions() {
-  [...elements.organizer.options].forEach((option) => {
-    option.disabled = option.value !== "all" && state.selectedOrganizers.has(option.value);
-  });
-  refreshCustomSelect(elements.organizer);
+  retainKnownValues(state.selectedOrganizers, state.organizerLabels);
+  updateFilterOptions(elements.organizer, state.selectedOrganizers);
 }
 
 function updateVenueOptions() {
-  [...elements.venue.options].forEach((option) => {
-    option.disabled = option.value !== "all" && state.selectedVenues.has(option.value);
+  retainKnownValues(state.selectedVenues, state.venueLabels);
+  updateFilterOptions(elements.venue, state.selectedVenues);
+}
+
+function retainKnownValues(selectedValues, knownValues) {
+  selectedValues.forEach((value) => {
+    if (!knownValues.has(value)) selectedValues.delete(value);
   });
-  refreshCustomSelect(elements.venue);
+}
+
+function updateFilterOptions(select, selectedValues) {
+  [...select.options].forEach((option) => {
+    option.disabled = option.value !== "all" && selectedValues.has(option.value);
+  });
+  refreshCustomSelect(select);
 }
 
 function renderActiveFilters() {
@@ -416,23 +468,31 @@ function setupCardSizing(container = elements.cards) {
 }
 
 function renderCard(event, index, showTicketButton = false) {
-  const date = new Date(`${event.date}T12:00:00`);
-  const day = new Intl.DateTimeFormat("en-GB", { day: "2-digit" }).format(date);
-  const month = new Intl.DateTimeFormat("en-GB", { month: "short" }).format(date);
-  const image = event.photo ? `<img src="${event.photo}" alt="${event.name} event poster" loading="${index === 0 ? "eager" : "lazy"}">` : "";
+  const eventName = escapeHtml(event.name);
+  const promoter = escapeHtml(organizerParts(event.promoter).join(" / "));
+  const eventGenre = escapeHtml(event.genre);
+  const eventVenue = escapeHtml(event.venue);
+  const image = event.photo ? `<img src="${escapeAttribute(event.photo)}" alt="${escapeAttribute(`${event.name} event poster`)}" loading="${index === 0 ? "eager" : "lazy"}">` : "";
   const action = eventAction(event);
   const actionLabel = ticketUrl(event.signupUrl) ? "Sign up" : "Tickets";
   const actionButton = showTicketButton ? action ? `<a class="event-ticket-button" href="${escapeAttribute(action.url)}" target="_blank" rel="noreferrer"><i data-lucide="${action.icon}" aria-hidden="true"></i>${action.label}</a>` : `<button class="event-ticket-button" type="button" title="${actionLabel} link not available" disabled><i data-lucide="${actionLabel === "Sign up" ? "clipboard-pen-line" : "ticket"}" aria-hidden="true"></i>${actionLabel}</button>` : "";
-  const ticketAttributes = !showTicketButton && action ? `data-ticket-index="${index}" role="link" tabindex="0" aria-label="Open ${action.label.toLowerCase()} for ${event.name}"` : "";
+  const ticketAttributes = !showTicketButton && action ? `data-ticket-index="${index}" role="link" tabindex="0" aria-label="${escapeAttribute(`Open ${action.label.toLowerCase()} for ${event.name}`)}"` : "";
   return `<article class="event-card" ${ticketAttributes} style="animation-delay: ${index * 70}ms">
     <div class="event-image">${image}</div>
-    <div class="event-content"><h3>${event.name}</h3><div class="event-meta"><span><i data-lucide="clock-3" aria-hidden="true"></i>${eventTime(event)}</span><span><i data-lucide="map-pin" aria-hidden="true"></i>${event.venue}</span><span><i data-lucide="ticket" aria-hidden="true"></i>${event.cost}</span><span class="event-age">${minimumAgeLabel(event.minimumAge)}</span></div><div class="event-lineup"><div class="lineup-list">${lineupList(event.lineup)}</div></div><p class="event-description">${event.description}</p><div class="event-footer"><span class="event-footer-date">${displayDate(event.date)}</span><span class="event-footer-genre">${event.genre}</span><span class="event-footer-promoter" title="${event.promoter}">${organizerParts(event.promoter).join(" / ")}</span>${actionButton}</div></div>
+    <div class="event-content"><h3>${eventName}</h3><div class="event-meta"><span><i data-lucide="clock-3" aria-hidden="true"></i>${escapeHtml(eventTime(event))}</span><span><i data-lucide="map-pin" aria-hidden="true"></i>${eventVenue}</span><span><i data-lucide="ticket" aria-hidden="true"></i>${escapeHtml(event.cost)}</span><span class="event-age">${escapeHtml(minimumAgeLabel(event.minimumAge))}</span></div><div class="event-lineup"><div class="lineup-list">${lineupList(event.lineup)}</div></div><p class="event-description">${escapeHtml(event.description)}</p><div class="event-footer"><span class="event-footer-date">${escapeHtml(displayDate(event.date))}</span><span class="event-footer-genre">${eventGenre}</span><span class="event-footer-promoter" title="${escapeAttribute(event.promoter)}">${promoter}</span>${actionButton}</div></div>
   </article>`;
 }
 
 function renderCards() {
   elements.count.textContent = state.filtered.length;
-  elements.cards.innerHTML = state.filtered.length ? state.filtered.map((event, index) => renderCard(event, index)).join("") : '<div class="empty-state">No events match that signal. Try another search.</div>';
+  if (state.filtered.length) {
+    elements.cards.innerHTML = state.filtered.map((event, index) => renderCard(event, index)).join("");
+  } else {
+    const emptyState = document.createElement("div");
+    emptyState.className = "empty-state";
+    emptyState.textContent = state.loadError ? "Unable to load events right now. Please try again later." : "No events match that signal. Try another search.";
+    elements.cards.replaceChildren(emptyState);
+  }
   window.lucide?.createIcons();
   setupCardSizing();
   elements.cards.querySelectorAll("[data-ticket-index]").forEach((card) => {
@@ -444,6 +504,18 @@ function renderCards() {
     card.addEventListener("click", (event) => { if (!event.target.closest("a, button")) openTickets(); });
     card.addEventListener("keydown", (event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openTickets(); } });
   });
+}
+
+function renderCalendarEvent(event) {
+  const eventIndex = state.filtered.indexOf(event);
+  const titleClass = /\s/.test(String(event.name).trim()) ? "" : " calendar-event-title-single";
+  const eventName = escapeHtml(event.name);
+  const organizer = escapeHtml(organizerParts(event.promoter).join(" / ") || "Organizer TBA");
+  const genre = escapeHtml(event.genre || "Genre TBA");
+  const venue = escapeHtml(event.venue || "Venue TBA");
+  const time = escapeHtml(eventTime(event));
+  const age = escapeHtml(minimumAgeLabel(event.minimumAge));
+  return `<button class="calendar-event" type="button" data-event-index="${eventIndex}" aria-label="${escapeAttribute(`Open details for ${event.name}`)}"><strong class="calendar-event-title${titleClass}">${eventName}</strong><span>${organizer}</span><span class="calendar-event-genre">${genre}</span><span><i data-lucide="map-pin" aria-hidden="true"></i>${venue}</span><span><i data-lucide="clock-3" aria-hidden="true"></i>${time}</span><span>${age}</span></button>`;
 }
 
 function renderCalendar() {
@@ -461,14 +533,19 @@ function renderCalendar() {
     const dateKey = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
     const dayEvents = state.filtered.filter((event) => event.date === dateKey);
     const isToday = today.getFullYear() === year && today.getMonth() === month && today.getDate() === day;
-    cells += `<div class="calendar-day current${isToday ? " today" : ""}"><span class="day-number">${oxfordWeekLabel(dateKey, day)}</span>${dayEvents.map((event) => { const eventIndex = state.filtered.indexOf(event); const titleClass = /\s/.test(event.name.trim()) ? "" : " calendar-event-title-single"; return `<button class="calendar-event" type="button" data-event-index="${eventIndex}" aria-label="Open details for ${event.name}"><strong class="calendar-event-title${titleClass}">${event.name}</strong><span>${organizerParts(event.promoter).join(" / ") || "Organizer TBA"}</span><span class="calendar-event-genre">${event.genre || "Genre TBA"}</span><span><i data-lucide="map-pin" aria-hidden="true"></i>${event.venue || "Venue TBA"}</span><span><i data-lucide="clock-3" aria-hidden="true"></i>${eventTime(event)}</span><span>${minimumAgeLabel(event.minimumAge)}</span></button>`; }).join("")}</div>`;
+    cells += `<div class="calendar-day current${isToday ? " today" : ""}"><span class="day-number">${oxfordWeekLabel(dateKey, day)}</span>${dayEvents.map(renderCalendarEvent).join("")}</div>`;
   }
   let renderedCells = offset + daysInMonth;
   while (renderedCells % 7 !== 0) { cells += '<div class="calendar-day"></div>'; renderedCells += 1; }
   const term = oxfordTermForMonth(year, month);
   elements.calendar.innerHTML = `<div class="calendar-toolbar"><h3>${displayMonth(new Date(year, month, 1))}${term ? ` // ${term.name}` : ""}</h3><div class="calendar-actions"><button class="icon-button" type="button" data-month="previous" aria-label="Previous month"><i data-lucide="chevron-left"></i></button><button class="icon-button" type="button" data-month="next" aria-label="Next month"><i data-lucide="chevron-right"></i></button></div></div><div class="calendar-weekdays"><div>Mon</div><div>Tue</div><div>Wed</div><div>Thu</div><div>Fri</div><div>Sat</div><div>Sun</div></div><div class="calendar-grid">${cells}</div>`;
   elements.calendar.querySelectorAll(".calendar-event").forEach((button) => button.addEventListener("click", () => openEventDialog(state.filtered[Number(button.dataset.eventIndex)])));
-  elements.calendar.querySelectorAll("[data-month]").forEach((button) => button.addEventListener("click", () => { state.month.setMonth(state.month.getMonth() + (button.dataset.month === "next" ? 1 : -1)); renderCalendar(); window.lucide?.createIcons(); }));
+  elements.calendar.querySelectorAll("[data-month]").forEach((button) => button.addEventListener("click", () => {
+    const nextMonth = new Date(state.month || new Date());
+    nextMonth.setMonth(nextMonth.getMonth() + (button.dataset.month === "next" ? 1 : -1));
+    state.month = nextMonth;
+    renderCalendar();
+  }));
   window.lucide?.createIcons();
 }
 
@@ -525,19 +602,20 @@ function setView(view) {
   });
   if (view === "calendar") {
     renderCalendar();
-    window.lucide?.createIcons();
   }
 }
 
 function fillGenres() {
+  elements.genre.replaceChildren(new Option("Add genre...", "all"));
   [...new Set(state.events.flatMap((event) => eventGenres(event.genre)))].sort().forEach((genre) => {
-    elements.genre.insertAdjacentHTML("beforeend", `<option value="${genre}">${genre.charAt(0).toUpperCase() + genre.slice(1)}</option>`);
+    elements.genre.append(new Option(genreLabel(genre), genre));
   });
   updateGenreOptions();
 }
 
 function fillOrganizers() {
   state.organizerLabels.clear();
+  elements.organizer.replaceChildren(new Option("Add organizer...", "all"));
   state.events.flatMap((event) => organizerParts(event.promoter)).forEach((organizer) => {
     const key = organizerKey(organizer);
     if (key && !state.organizerLabels.has(key)) state.organizerLabels.set(key, organizer);
@@ -553,6 +631,7 @@ function fillOrganizers() {
 
 function fillVenues() {
   state.venueLabels.clear();
+  elements.venue.replaceChildren(new Option("Add venue...", "all"));
   state.events.forEach((event) => {
     const key = organizerKey(event.venue);
     if (key && !state.venueLabels.has(key)) state.venueLabels.set(key, event.venue);
@@ -600,19 +679,23 @@ function removeFilter(key) {
 }
 
 async function loadEvents() {
-  state.events = [];
+  state.loadError = false;
   state.month = new Date();
+  const cachedEvents = readEventCache();
+  if (cachedEvents) applyEvents(cachedEvents);
   try {
-    const response = await fetch(SHEET_URL);
+    const response = await fetch(SHEET_URL, { cache: "no-cache" });
     if (!response.ok) throw new Error(`Sheet request failed: ${response.status}`);
     const workbook = XLSX.read(await response.arrayBuffer(), { type: "array" });
     const rows = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], { header: 1, defval: "", raw: true });
-    state.events = normalizeRows(rows);
-  } catch (error) {}
-  fillGenres();
-  fillOrganizers();
-  fillVenues();
-  applyFilters();
+    const events = normalizeRows(rows);
+    writeEventCache(events);
+    applyEvents(events);
+  } catch (error) {
+    state.loadError = !cachedEvents;
+    const message = cachedEvents ? "Unable to refresh events; using cached data" : "Unable to load events";
+    console[cachedEvents ? "warn" : "error"](message, error);
+  }
 }
 
 document.querySelectorAll(".view-button").forEach((button) => button.addEventListener("click", () => setView(button.dataset.view)));
@@ -640,8 +723,11 @@ document.addEventListener("click", (event) => {
 });
 document.addEventListener("keydown", (event) => {
   if (event.key === "Escape") { closeFilterMenu(); closeCustomSelects(); }
+  if (event.key === "/" && document.activeElement !== elements.search) { event.preventDefault(); elements.search.focus(); }
 });
-document.addEventListener("keydown", (event) => { if (event.key === "/" && document.activeElement !== elements.search) { event.preventDefault(); elements.search.focus(); } });
 if (window.lucide) lucide.createIcons();
 setupCustomSelects();
 loadEvents();
+window.addEventListener("pageshow", (event) => {
+  if (event.persisted) loadEvents();
+});

@@ -207,6 +207,7 @@ kbd { min-width: 21px; padding: 2px 5px; border: 1px solid #41443e; color: var(-
   .calendar-event { min-width: 0; max-width: 100%; padding: 4px; overflow: hidden; }
   .calendar-event strong { display: -webkit-box; margin-bottom: 3px; font-size: 8px; line-height: 1.1; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-clamp: 3; overflow-wrap: break-word; word-break: normal; }
   .calendar-event span { display: block; font-size: 7px; line-height: 1.15; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .calendar-event span.calendar-event-genre { display: -webkit-box; white-space: normal; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; }
   .event-dialog { width: calc(100vw - 20px); }
   .event-dialog-shell { padding: 10px; }
   .event-dialog-close { top: 18px; right: 18px; }
@@ -216,4 +217,10 @@ kbd { min-width: 21px; padding: 2px 5px; border: 1px solid #41443e; color: var(-
   .about-details { justify-items: start; text-align: left; }
   .about-logo { max-width: 200px; }
   .site-footer { flex-wrap: wrap; gap: 12px 25px; padding: 20px; font-size: 9px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  .trail-background { display: none; }
+  *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
 }
