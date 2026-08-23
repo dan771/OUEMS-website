@@ -22,7 +22,7 @@ const OXFORD_TERMS = [
   { name: "Hilary", zeroWeekStart: "2033-01-09", start: "2033-01-16", end: "2033-03-12" },
   { name: "Trinity", zeroWeekStart: "2033-04-17", start: "2033-04-24", end: "2033-06-18" }
 ];
-const state = { events: [], filtered: [], selectedGenres: new Set(), selectedOrganizers: new Set(), organizerLabels: new Map(), view: "cards", month: null };
+const state = { events: [], filtered: [], selectedGenres: new Set(), selectedOrganizers: new Set(), selectedVenues: new Set(), organizerLabels: new Map(), venueLabels: new Map(), view: "cards", month: null };
 const elements = {
   cards: document.querySelector("#cards-view"),
   calendar: document.querySelector("#calendar-view"),
@@ -34,6 +34,7 @@ const elements = {
   search: document.querySelector("#search-input"),
   genre: document.querySelector("#genre-filter"),
   organizer: document.querySelector("#organizer-filter"),
+  venue: document.querySelector("#venue-filter"),
   sort: document.querySelector("#sort-select"),
   dateFrom: document.querySelector("#date-from"),
   dateTo: document.querySelector("#date-to"),
@@ -129,7 +130,7 @@ function setupCustomSelect(select) {
 }
 
 function setupCustomSelects() {
-  [elements.genre, elements.organizer, elements.sort, elements.startMode, elements.endMode].forEach(setupCustomSelect);
+  [elements.genre, elements.organizer, elements.venue, elements.sort, elements.startMode, elements.endMode].forEach(setupCustomSelect);
 }
 
 function driveImageSource(value) {
@@ -333,12 +334,20 @@ function updateOrganizerOptions() {
   refreshCustomSelect(elements.organizer);
 }
 
+function updateVenueOptions() {
+  [...elements.venue.options].forEach((option) => {
+    option.disabled = option.value !== "all" && state.selectedVenues.has(option.value);
+  });
+  refreshCustomSelect(elements.venue);
+}
+
 function renderActiveFilters() {
   const filters = [];
   const query = elements.search.value.trim();
   if (query) filters.push({ key: "search", label: `Search: ${query}` });
   state.selectedGenres.forEach((genre) => filters.push({ key: `genre:${genre}`, label: `Genre: ${genreLabel(genre)}` }));
   state.selectedOrganizers.forEach((organizer) => filters.push({ key: `organizer:${organizer}`, label: `Organizer: ${state.organizerLabels.get(organizer) || organizer}` }));
+  state.selectedVenues.forEach((venue) => filters.push({ key: `venue:${venue}`, label: `Venue: ${state.venueLabels.get(venue) || venue}` }));
   if (elements.dateFrom.value) filters.push({ key: "date-from", label: `Date from: ${elements.dateFrom.value}` });
   if (elements.dateTo.value) filters.push({ key: "date-to", label: `Date to: ${elements.dateTo.value}` });
   if (elements.startTime.value) filters.push({ key: "start-time", label: `Start ${elements.startMode.value}: ${elements.startTime.value}` });
@@ -362,6 +371,7 @@ function renderActiveFilters() {
   }));
   updateGenreOptions();
   updateOrganizerOptions();
+  updateVenueOptions();
   window.lucide?.createIcons();
 }
 
@@ -479,6 +489,7 @@ function applyFilters() {
   const query = elements.search.value.trim().toLowerCase();
   const selectedGenres = [...state.selectedGenres];
   const selectedOrganizers = [...state.selectedOrganizers];
+  const selectedVenues = [...state.selectedVenues];
   const dateFrom = elements.dateFrom.value;
   const dateTo = elements.dateTo.value;
   const startTime = minutesFromTime(elements.startTime.value);
@@ -487,16 +498,17 @@ function applyFilters() {
     const matchesSearch = !query || Object.values(event).join(" ").toLowerCase().includes(query);
     const matchesGenre = !selectedGenres.length || selectedGenres.some((genre) => eventGenres(event.genre).includes(genre));
     const matchesOrganizer = !selectedOrganizers.length || organizerParts(event.promoter).some((organizer) => selectedOrganizers.includes(organizerKey(organizer)));
+    const matchesVenue = !selectedVenues.length || selectedVenues.includes(organizerKey(event.venue));
     const matchesDate = (!dateFrom || event.date >= dateFrom) && (!dateTo || event.date <= dateTo);
     const eventStart = minutesFromTime(event.time);
     const eventEnd = eventEndMinutes(event);
     const matchesStart = matchesTimeBoundary(eventStart, startTime, elements.startMode.value);
     const matchesEnd = matchesTimeBoundary(eventEnd, endTime, elements.endMode.value);
-    return matchesSearch && matchesGenre && matchesOrganizer && matchesDate && matchesStart && matchesEnd;
+    return matchesSearch && matchesGenre && matchesOrganizer && matchesVenue && matchesDate && matchesStart && matchesEnd;
   });
   const sort = elements.sort.value;
-  state.filtered.sort((a, b) => sort === "name" ? a.name.localeCompare(b.name) : sort === "genre" ? a.genre.localeCompare(b.genre) : sort === "organizer" ? a.promoter.localeCompare(b.promoter) : a.date.localeCompare(b.date));
-  if (query || selectedGenres.length || selectedOrganizers.length || dateFrom || dateTo || startTime !== null || endTime !== null) setView("cards");
+  state.filtered.sort((a, b) => sort === "name" ? a.name.localeCompare(b.name) : sort === "genre" ? a.genre.localeCompare(b.genre) : sort === "organizer" ? a.promoter.localeCompare(b.promoter) : sort === "venue" ? a.venue.localeCompare(b.venue) : a.date.localeCompare(b.date));
+  if (query || selectedGenres.length || selectedOrganizers.length || selectedVenues.length || dateFrom || dateTo || startTime !== null || endTime !== null) setView("cards");
   renderActiveFilters();
   renderCards();
   if (state.view === "calendar") renderCalendar();
@@ -539,6 +551,21 @@ function fillOrganizers() {
   updateOrganizerOptions();
 }
 
+function fillVenues() {
+  state.venueLabels.clear();
+  state.events.forEach((event) => {
+    const key = organizerKey(event.venue);
+    if (key && !state.venueLabels.has(key)) state.venueLabels.set(key, event.venue);
+  });
+  [...state.venueLabels.entries()].sort(([, first], [, second]) => first.localeCompare(second)).forEach(([key, venue]) => {
+    const option = document.createElement("option");
+    option.value = key;
+    option.textContent = venue;
+    elements.venue.append(option);
+  });
+  updateVenueOptions();
+}
+
 function addGenreFilter() {
   if (elements.genre.value === "all") return;
   state.selectedGenres.add(elements.genre.value);
@@ -553,6 +580,13 @@ function addOrganizerFilter() {
   applyFilters();
 }
 
+function addVenueFilter() {
+  if (elements.venue.value === "all") return;
+  state.selectedVenues.add(elements.venue.value);
+  elements.venue.value = "all";
+  applyFilters();
+}
+
 function removeFilter(key) {
   if (key === "search") elements.search.value = "";
   if (key === "date-from") elements.dateFrom.value = "";
@@ -561,6 +595,7 @@ function removeFilter(key) {
   if (key === "end-time") elements.endTime.value = "";
   if (key.startsWith("genre:")) state.selectedGenres.delete(key.slice(6));
   if (key.startsWith("organizer:")) state.selectedOrganizers.delete(key.slice(10));
+  if (key.startsWith("venue:")) state.selectedVenues.delete(key.slice(6));
   applyFilters();
 }
 
@@ -576,6 +611,7 @@ async function loadEvents() {
   } catch (error) {}
   fillGenres();
   fillOrganizers();
+  fillVenues();
   applyFilters();
 }
 
@@ -583,6 +619,7 @@ document.querySelectorAll(".view-button").forEach((button) => button.addEventLis
 elements.search.addEventListener("input", applyFilters);
 elements.genre.addEventListener("change", addGenreFilter);
 elements.organizer.addEventListener("change", addOrganizerFilter);
+elements.venue.addEventListener("change", addVenueFilter);
 elements.sort.addEventListener("change", applyFilters);
 [elements.dateFrom, elements.dateTo, elements.startMode, elements.startTime, elements.endMode, elements.endTime].forEach((input) => input.addEventListener("input", applyFilters));
 elements.activeFilters.addEventListener("click", (event) => {
