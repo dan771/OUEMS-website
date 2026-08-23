@@ -22,20 +22,6 @@ const OXFORD_TERMS = [
   { name: "Hilary", zeroWeekStart: "2033-01-09", start: "2033-01-16", end: "2033-03-12" },
   { name: "Trinity", zeroWeekStart: "2033-04-17", start: "2033-04-24", end: "2033-06-18" }
 ];
-const fallbackEvents = [{
-  name: "Jungle is massive",
-  promoter: "OUEMS",
-  description: "Wicked jungle night eh",
-  lineup: "Mr Bean",
-  date: "2026-10-28",
-  time: "23:00",
-  duration: "5 hours",
-  cost: "£5-10",
-  genre: "jungle",
-  photo: "",
-  photoSource: ""
-}];
-
 const state = { events: [], filtered: [], selectedGenres: new Set(), selectedOrganizers: new Set(), organizerLabels: new Map(), view: "cards", month: null };
 const elements = {
   cards: document.querySelector("#cards-view"),
@@ -172,19 +158,6 @@ function minutesFromTime(value) {
   return hours * 60 + minutes;
 }
 
-function durationInMinutes(value) {
-  if (typeof value === "number") return Math.round(value < 1 ? value * 1440 : value * 60);
-  const text = String(value || "").trim().toLowerCase();
-  if (!text) return null;
-  const hours = text.match(/(\d+(?:\.\d+)?)\s*(?:hours?|hrs?|h)/);
-  const minutes = text.match(/(\d+)\s*(?:minutes?|mins?|m)/);
-  if (hours || minutes) return Math.round(Number(hours?.[1] || 0) * 60 + Number(minutes?.[1] || 0));
-  const clock = text.match(/^(\d+)\s*[:.]\s*(\d{2})$/);
-  if (clock && Number(clock[2]) < 60) return Number(clock[1]) * 60 + Number(clock[2]);
-  if (/^\d+(?:\.\d+)?$/.test(text)) return Math.round(Number(text) * 60);
-  return null;
-}
-
 function formatClock(minutes) {
   const normalized = ((Math.round(minutes) % 1440) + 1440) % 1440;
   return `${String(Math.floor(normalized / 60)).padStart(2, "0")}.${String(normalized % 60).padStart(2, "0")}`;
@@ -192,14 +165,12 @@ function formatClock(minutes) {
 
 function eventTime(event) {
   const start = minutesFromTime(event.time);
-  const duration = durationInMinutes(event.duration);
-  return start !== null && duration !== null ? `${formatClock(start)}–${formatClock(start + duration)}` : start !== null ? formatClock(start) : "Time TBA";
+  const end = minutesFromTime(event.endTime);
+  return start !== null && end !== null ? `${formatClock(start)}–${formatClock(end)}` : start !== null ? formatClock(start) : "Time TBA";
 }
 
 function eventEndMinutes(event) {
-  const start = minutesFromTime(event.time);
-  if (start === null) return null;
-  return (start + (durationInMinutes(event.duration) || 0)) % 1440;
+  return minutesFromTime(event.endTime);
 }
 
 function matchesTimeBoundary(eventTime, boundary, mode) {
@@ -239,22 +210,32 @@ function normalizeRows(rows) {
     description: headerIndex(headers, "desciption"),
     lineup: headerIndex(headers, "lineup"),
     date: headerIndex(headers, "date"),
-    time: headerIndex(headers, "time"),
-    duration: headerIndex(headers, "duration"),
+    time: headerIndex(headers, "start time"),
+    endTime: headerIndex(headers, "end time"),
     cost: headerIndex(headers, "cost"),
     photo: headerIndex(headers, "poster"),
-    genre: headerIndex(headers, "genre")
+    genre: headerIndex(headers, "genre"),
+    venue: headerIndex(headers, "venue"),
+    ticketUrl: headerIndex(headers, "ticket url"),
+    minimumAge: headerIndex(headers, "minimum age"),
+    signupUrl: headerIndex(headers, "sign up link"),
+    accepted: headerIndex(headers, "accepted")
   };
-  return rows.slice(1).filter((row) => row[index.name]).map((row) => ({
+  return rows.slice(1).filter((row) => row[index.name] && String(row[index.accepted] || "").trim().toLowerCase() === "yes").map((row) => ({
     name: row[index.name] || "Untitled transmission",
     promoter: row[index.promoter] || "OUEMS",
     description: row[index.description] || "An OUEMS electronic music event.",
     lineup: row[index.lineup] || "Lineup TBA",
     date: excelDate(row[index.date]),
     time: excelTime(row[index.time]),
-    duration: row[index.duration] ?? "",
+    endTime: excelTime(row[index.endTime]),
     cost: row[index.cost] || "Free / TBA",
     genre: row[index.genre] || "electronic",
+    venue: row[index.venue] || "Venue TBA",
+    ticketUrl: row[index.ticketUrl] || "",
+    minimumAge: row[index.minimumAge] ?? "",
+    signupUrl: row[index.signupUrl] || "",
+    accepted: row[index.accepted] || "",
     photo: driveImageUrl(row[index.photo]),
     photoSource: driveImageSource(row[index.photo])
   }));
@@ -303,6 +284,35 @@ function organizerParts(value) {
 
 function organizerKey(value) {
   return String(value || "").trim().toLowerCase();
+}
+
+function ticketUrl(value) {
+  const text = String(value || "").trim();
+  if (!text) return "";
+  try {
+    const url = new URL(text, window.location.href);
+    return ["http:", "https:"].includes(url.protocol) ? url.href : "";
+  } catch (error) {
+    return "";
+  }
+}
+
+function escapeAttribute(value) {
+  return String(value).replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[character]));
+}
+
+function minimumAgeLabel(value) {
+  const text = String(value ?? "").trim();
+  if (!text) return "Age TBA";
+  const numeric = Number(text);
+  return Number.isFinite(numeric) ? `${numeric}+` : text.endsWith("+") ? text : `${text}+`;
+}
+
+function eventAction(event) {
+  const signup = ticketUrl(event.signupUrl);
+  if (signup) return { url: signup, label: "Sign up", icon: "clipboard-pen-line" };
+  const tickets = ticketUrl(event.ticketUrl);
+  return tickets ? { url: tickets, label: "Tickets", icon: "ticket" } : null;
 }
 
 function updateGenreOptions() {
@@ -391,22 +401,35 @@ function setupCardSizing(container = elements.cards) {
   });
 }
 
-function renderCard(event, index) {
+function renderCard(event, index, showTicketButton = false) {
   const date = new Date(`${event.date}T12:00:00`);
   const day = new Intl.DateTimeFormat("en-GB", { day: "2-digit" }).format(date);
   const month = new Intl.DateTimeFormat("en-GB", { month: "short" }).format(date);
   const image = event.photo ? `<img src="${event.photo}" alt="${event.name} event poster" loading="${index === 0 ? "eager" : "lazy"}">` : "";
-  return `<article class="event-card" style="animation-delay: ${index * 70}ms">
+  const action = eventAction(event);
+  const actionLabel = ticketUrl(event.signupUrl) ? "Sign up" : "Tickets";
+  const actionButton = showTicketButton ? action ? `<a class="event-ticket-button" href="${escapeAttribute(action.url)}" target="_blank" rel="noreferrer"><i data-lucide="${action.icon}" aria-hidden="true"></i>${action.label}</a>` : `<button class="event-ticket-button" type="button" title="${actionLabel} link not available" disabled><i data-lucide="${actionLabel === "Sign up" ? "clipboard-pen-line" : "ticket"}" aria-hidden="true"></i>${actionLabel}</button>` : "";
+  const ticketAttributes = !showTicketButton && action ? `data-ticket-index="${index}" role="link" tabindex="0" aria-label="Open ${action.label.toLowerCase()} for ${event.name}"` : "";
+  return `<article class="event-card" ${ticketAttributes} style="animation-delay: ${index * 70}ms">
     <div class="event-image">${image}</div>
-    <div class="event-content"><h3>${event.name}</h3><div class="event-meta"><span><i data-lucide="clock-3" aria-hidden="true"></i>${eventTime(event)}</span><span><i data-lucide="ticket" aria-hidden="true"></i>${event.cost}</span></div><div class="event-lineup"><div class="lineup-list">${lineupList(event.lineup)}</div></div><p class="event-description">${event.description}</p><div class="event-footer"><span class="event-footer-date">${displayDate(event.date)}</span><span class="event-footer-genre">${event.genre}</span><span class="event-footer-promoter" title="${event.promoter}">${organizerParts(event.promoter).join(" / ")}</span></div></div>
+    <div class="event-content"><h3>${event.name}</h3><div class="event-meta"><span><i data-lucide="clock-3" aria-hidden="true"></i>${eventTime(event)}</span><span><i data-lucide="map-pin" aria-hidden="true"></i>${event.venue}</span><span><i data-lucide="ticket" aria-hidden="true"></i>${event.cost}</span><span class="event-age">${minimumAgeLabel(event.minimumAge)}</span></div><div class="event-lineup"><div class="lineup-list">${lineupList(event.lineup)}</div></div><p class="event-description">${event.description}</p><div class="event-footer"><span class="event-footer-date">${displayDate(event.date)}</span><span class="event-footer-genre">${event.genre}</span><span class="event-footer-promoter" title="${event.promoter}">${organizerParts(event.promoter).join(" / ")}</span>${actionButton}</div></div>
   </article>`;
 }
 
 function renderCards() {
   elements.count.textContent = state.filtered.length;
-  elements.cards.innerHTML = state.filtered.length ? state.filtered.map(renderCard).join("") : '<div class="empty-state">No events match that signal. Try another search.</div>';
+  elements.cards.innerHTML = state.filtered.length ? state.filtered.map((event, index) => renderCard(event, index)).join("") : '<div class="empty-state">No events match that signal. Try another search.</div>';
   window.lucide?.createIcons();
   setupCardSizing();
+  elements.cards.querySelectorAll("[data-ticket-index]").forEach((card) => {
+    const openTickets = () => {
+      const event = state.filtered[Number(card.dataset.ticketIndex)];
+      const url = ticketUrl(event?.ticketUrl);
+      if (url) window.open(url, "_blank", "noopener,noreferrer");
+    };
+    card.addEventListener("click", (event) => { if (!event.target.closest("a, button")) openTickets(); });
+    card.addEventListener("keydown", (event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openTickets(); } });
+  });
 }
 
 function renderCalendar() {
@@ -424,7 +447,7 @@ function renderCalendar() {
     const dateKey = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
     const dayEvents = state.filtered.filter((event) => event.date === dateKey);
     const isToday = today.getFullYear() === year && today.getMonth() === month && today.getDate() === day;
-    cells += `<div class="calendar-day current${isToday ? " today" : ""}"><span class="day-number">${oxfordWeekLabel(dateKey, day)}</span>${dayEvents.map((event) => { const eventIndex = state.filtered.indexOf(event); const titleClass = /\s/.test(event.name.trim()) ? "" : " calendar-event-title-single"; return `<button class="calendar-event" type="button" data-event-index="${eventIndex}" aria-label="Open details for ${event.name}"><strong class="calendar-event-title${titleClass}">${event.name}</strong><span>${organizerParts(event.promoter).join(" / ") || "Organizer TBA"}</span><span>${eventTime(event)}</span><span>${event.genre || "Genre TBA"}</span></button>`; }).join("")}</div>`;
+    cells += `<div class="calendar-day current${isToday ? " today" : ""}"><span class="day-number">${oxfordWeekLabel(dateKey, day)}</span>${dayEvents.map((event) => { const eventIndex = state.filtered.indexOf(event); const titleClass = /\s/.test(event.name.trim()) ? "" : " calendar-event-title-single"; return `<button class="calendar-event" type="button" data-event-index="${eventIndex}" aria-label="Open details for ${event.name}"><strong class="calendar-event-title${titleClass}">${event.name}</strong><span>${organizerParts(event.promoter).join(" / ") || "Organizer TBA"}</span><span class="calendar-event-genre">${event.genre || "Genre TBA"}</span><span><i data-lucide="map-pin" aria-hidden="true"></i>${event.venue || "Venue TBA"}</span><span><i data-lucide="clock-3" aria-hidden="true"></i>${eventTime(event)}</span><span>${minimumAgeLabel(event.minimumAge)}</span></button>`; }).join("")}</div>`;
   }
   let renderedCells = offset + daysInMonth;
   while (renderedCells % 7 !== 0) { cells += '<div class="calendar-day"></div>'; renderedCells += 1; }
@@ -432,11 +455,12 @@ function renderCalendar() {
   elements.calendar.innerHTML = `<div class="calendar-toolbar"><h3>${displayMonth(new Date(year, month, 1))}${term ? ` // ${term.name}` : ""}</h3><div class="calendar-actions"><button class="icon-button" type="button" data-month="previous" aria-label="Previous month"><i data-lucide="chevron-left"></i></button><button class="icon-button" type="button" data-month="next" aria-label="Next month"><i data-lucide="chevron-right"></i></button></div></div><div class="calendar-weekdays"><div>Mon</div><div>Tue</div><div>Wed</div><div>Thu</div><div>Fri</div><div>Sat</div><div>Sun</div></div><div class="calendar-grid">${cells}</div>`;
   elements.calendar.querySelectorAll(".calendar-event").forEach((button) => button.addEventListener("click", () => openEventDialog(state.filtered[Number(button.dataset.eventIndex)])));
   elements.calendar.querySelectorAll("[data-month]").forEach((button) => button.addEventListener("click", () => { state.month.setMonth(state.month.getMonth() + (button.dataset.month === "next" ? 1 : -1)); renderCalendar(); window.lucide?.createIcons(); }));
+  window.lucide?.createIcons();
 }
 
 function openEventDialog(event) {
   if (!event) return;
-  elements.eventDialogContent.innerHTML = renderCard(event, 0);
+  elements.eventDialogContent.innerHTML = renderCard(event, 0, true);
   elements.eventDialogContent.querySelector("h3")?.setAttribute("id", "event-dialog-title");
   elements.eventDialog.showModal();
   window.lucide?.createIcons();
@@ -467,7 +491,7 @@ function applyFilters() {
     return matchesSearch && matchesGenre && matchesOrganizer && matchesDate && matchesStart && matchesEnd;
   });
   const sort = elements.sort.value;
-  state.filtered.sort((a, b) => sort === "name" ? a.name.localeCompare(b.name) : sort === "genre" ? a.genre.localeCompare(b.genre) : a.date.localeCompare(b.date));
+  state.filtered.sort((a, b) => sort === "name" ? a.name.localeCompare(b.name) : sort === "genre" ? a.genre.localeCompare(b.genre) : sort === "organizer" ? a.promoter.localeCompare(b.promoter) : a.date.localeCompare(b.date));
   if (query || selectedGenres.length || selectedOrganizers.length || dateFrom || dateTo || startTime !== null || endTime !== null) setView("cards");
   renderActiveFilters();
   renderCards();
@@ -537,16 +561,15 @@ function removeFilter(key) {
 }
 
 async function loadEvents() {
-  state.events = fallbackEvents;
-  state.month = new Date(`${fallbackEvents[0].date}T12:00:00`);
+  state.events = [];
+  state.month = null;
   try {
     const response = await fetch(SHEET_URL);
     if (!response.ok) throw new Error(`Sheet request failed: ${response.status}`);
     const workbook = XLSX.read(await response.arrayBuffer(), { type: "array" });
     const rows = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], { header: 1, defval: "", raw: true });
-    const liveEvents = normalizeRows(rows);
-    if (liveEvents.length) state.events = liveEvents;
-    state.month = new Date(`${state.events[0].date}T12:00:00`);
+    state.events = normalizeRows(rows);
+    state.month = state.events.length ? new Date(`${state.events[0].date}T12:00:00`) : null;
   } catch (error) {}
   fillGenres();
   fillOrganizers();

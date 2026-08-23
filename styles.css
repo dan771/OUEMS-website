@@ -125,6 +125,13 @@ kbd { min-width: 21px; padding: 2px 5px; border: 1px solid #41443e; color: var(-
 .event-footer > span { min-width: 0; overflow: hidden; white-space: nowrap; }
 .event-footer-date { color: var(--white); }
 .event-footer-genre, .event-footer-promoter { text-align: right; text-overflow: ellipsis; }
+.cards-view .event-card[data-ticket-index] { cursor: pointer; }
+.cards-view .event-card[data-ticket-index]:focus-visible { outline: 1px solid var(--acid); outline-offset: 3px; }
+.event-ticket-button { grid-column: 1 / -1; display: inline-flex; align-items: center; justify-self: start; gap: 6px; margin-top: 3px; padding: 8px 11px; border: 1px solid var(--acid); color: var(--black); background: var(--acid); font-size: 10px; font-weight: 700; letter-spacing: .08em; text-decoration: none; text-transform: uppercase; }
+.event-ticket-button svg { width: 1em; height: 1em; }
+.event-ticket-button:hover { color: var(--white); background: transparent; }
+.event-ticket-button:disabled { cursor: not-allowed; opacity: .45; }
+.event-ticket-button:disabled:hover { color: var(--black); background: var(--acid); }
 .empty-state { grid-column: 1 / -1; padding: 60px 20px; border: 1px solid var(--line); color: var(--muted); text-align: center; }
 
 .calendar-view { border: 1px solid var(--line); background: rgba(16,17,16,.72); }
@@ -148,6 +155,8 @@ kbd { min-width: 21px; padding: 2px 5px; border: 1px solid #41443e; color: var(-
 .calendar-event-title { overflow: hidden; }
 .calendar-event-title-single { white-space: nowrap; text-overflow: ellipsis; overflow-wrap: normal; word-break: normal; }
 .calendar-event span { color: var(--muted); font-size: 10px; line-height: 1.25; }
+.calendar-event-genre { display: -webkit-box !important; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; }
+.calendar-event span svg { display: inline-block; width: 1em; height: 1em; margin-right: .35em; vertical-align: -.15em; color: var(--acid); stroke-width: 1.7; }
 .event-dialog { width: min(900px, calc(100vw - 32px)); max-width: none; padding: 0; border: 1px solid var(--line); color: var(--white); background: var(--panel); }
 .event-dialog::backdrop { background: rgba(0, 0, 0, .78); }
 .event-dialog-shell { position: relative; padding: 14px; }
