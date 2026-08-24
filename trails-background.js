@@ -1,6 +1,12 @@
 (() => {
+  // ---------------------------------------------------------------------------
+  // Canvas setup and animation state
+  // ---------------------------------------------------------------------------
+
   const canvas = document.querySelector("#trail-background");
   const glowCanvas = document.querySelector("#trail-background-glow");
+
+  // The effect is decorative, so skip all canvas work when motion is reduced.
   if (!canvas || !glowCanvas || matchMedia("(prefers-reduced-motion: reduce)").matches) return;
 
   const context = canvas.getContext("2d");
@@ -8,7 +14,19 @@
   const viewport = { width: innerWidth, height: innerHeight };
   const coreColors = ["255,255,255", "216,255,62", "150,245,255"];
   const glowColors = ["150,245,255", "216,255,62", "255,150,50", "255,90,210"];
-  const state = { speed: .72, flicker: .68, density: .45, scrollBoost: 0, lastScrollY: scrollY, seed: Math.random() * 1000, lastTime: 0, elapsed: 0, trailCycle: -1, resetTrails: true, particles: [] };
+  const state = {
+    speed: .72,
+    flicker: .68,
+    density: .45,
+    scrollBoost: 0,
+    lastScrollY: scrollY,
+    seed: Math.random() * 1000,
+    lastTime: 0,
+    elapsed: 0,
+    trailCycle: -1,
+    resetTrails: true,
+    particles: []
+  };
 
   function resizeCanvas() {
     viewport.width = innerWidth;
@@ -17,6 +35,9 @@
     canvas.width = Math.floor(viewport.width * ratio);
     canvas.height = Math.floor(viewport.height * ratio);
     context.setTransform(ratio, 0, 0, ratio, 0, 0);
+
+    // Glow is intentionally rendered at a lower resolution. The CSS blur hides
+    // the reduced detail while saving work on every animation frame.
     const glowRatio = Math.min(ratio * .5, 1);
     glowCanvas.width = Math.floor(viewport.width * glowRatio);
     glowCanvas.height = Math.floor(viewport.height * glowRatio);
@@ -24,6 +45,11 @@
     glowContext.clearRect(0, 0, viewport.width, viewport.height);
     state.resetTrails = true;
   }
+
+
+  // ---------------------------------------------------------------------------
+  // Deterministic noise and flicker helpers
+  // ---------------------------------------------------------------------------
 
   function randomValue(index, time) {
     return (Math.sin(index * 12.9898 + time * 78.233 + state.seed * 4.137) * 43758.5453) % 1;
@@ -39,11 +65,19 @@
     return 1 - state.flicker * (.08 + slow * .16 + pulse * .76);
   }
 
+
+  // ---------------------------------------------------------------------------
+  // Persistent background texture
+  // ---------------------------------------------------------------------------
+
   function paintBase(time) {
     const { width, height } = viewport;
     const cycle = Math.floor(time / 20);
     const hardReset = state.resetTrails || cycle !== state.trailCycle;
     state.trailCycle = cycle;
+
+    // A translucent fill makes previous frames decay into trails. Clear fully
+    // after resize and periodically to prevent the canvas becoming saturated.
     context.globalCompositeOperation = "source-over";
     context.fillStyle = hardReset ? "#020202" : "rgba(2,2,2,.065)";
     context.fillRect(0, 0, width, height);
@@ -68,22 +102,34 @@
       context.lineWidth = .35 + Math.abs(trailNoise(seed)) * .45;
       context.beginPath();
       context.moveTo(x, y);
-      context.lineTo(x + Math.cos(angle) * length * .52 + Math.cos(angle + Math.PI / 2) * kink, y + Math.sin(angle) * length * .52 + Math.sin(angle + Math.PI / 2) * kink);
+      context.lineTo(
+        x + Math.cos(angle) * length * .52 + Math.cos(angle + Math.PI / 2) * kink,
+        y + Math.sin(angle) * length * .52 + Math.sin(angle + Math.PI / 2) * kink
+      );
       context.lineTo(x + Math.cos(angle) * length, y + Math.sin(angle) * length);
       context.stroke();
     }
+
     state.resetTrails = false;
     return hardReset;
   }
 
+
+  // ---------------------------------------------------------------------------
+  // Recursive branches
+  // ---------------------------------------------------------------------------
+
   function drawBranch(target, startX, startY, angle, length, depth, alpha, seed, time, glow = false) {
     if (depth === 0 || length < 3) return;
-    const segments = glow ? 4 : 4;
+
+    const segments = 4;
     let x = startX;
     let y = startY;
     let currentAngle = angle;
+
     target.beginPath();
     target.moveTo(x, y);
+
     for (let segment = 1; segment <= segments; segment += 1) {
       const progress = segment / segments;
       currentAngle += trailNoise((glow ? 1 : Math.floor(time * 12)) + seed * (glow ? 1 : 2.3) + segment) * (glow ? .38 + depth * .08 : .42);
@@ -92,13 +138,18 @@
       y += Math.sin(currentAngle) * length / segments + Math.sin(currentAngle + Math.PI / 2) * bend;
       target.lineTo(x, y);
     }
+
     const palette = glow ? glowColors : coreColors;
     const color = palette[Math.floor(Math.abs(seed)) % palette.length];
     const hot = (Math.sin(time * (glow ? 3 : 2.8) + seed) + 1) * .5;
     target.strokeStyle = `rgba(${color},${alpha * (glow ? 1 : .8 + hot * .2)})`;
     target.lineWidth = glow ? 2.2 + depth * 1.4 + Math.abs(trailNoise(seed + time * 2)) * 1.8 : Math.max(.45, depth * .48);
     target.stroke();
+
     if (depth <= 1) return;
+
+    // Each recursive level forks from a point along its parent. Separate seeds
+    // prevent the two children from tracing identical paths.
     const spread = (glow ? .55 : .52) + Math.abs(trailNoise(seed * (glow ? 2.2 : 2.7) + Math.floor(time * (glow ? 1 : 5)))) * (glow ? .6 : .42);
     const branchLength = length * ((glow ? .32 : .26) + Math.abs(trailNoise(seed + Math.floor(time * (glow ? 3.1 : .1)))) * (glow ? .16 : .16));
     const point = glow ? .42 + Math.abs(trailNoise(seed + time * 3.1)) * .4 : 1;
@@ -107,6 +158,11 @@
     drawBranch(target, branchX, branchY, currentAngle - spread, branchLength, depth - 1, alpha * .66, seed + 4.7, time, glow);
     drawBranch(target, branchX, branchY, currentAngle + spread, branchLength * .8, depth - 1, alpha * .54, seed + 9.2, time, glow);
   }
+
+
+  // ---------------------------------------------------------------------------
+  // Particle lifecycle
+  // ---------------------------------------------------------------------------
 
   function createParticle(index) {
     const scale = Math.max(viewport.width, viewport.height);
@@ -155,7 +211,35 @@
     particle.history.push({ x: particle.x, y: particle.y });
     const limit = 128 + Math.floor(state.density * 48);
     if (particle.history.length > limit) particle.history.shift();
-    if (particle.x < -80 || particle.x > viewport.width + 80 || particle.y < -80 || particle.y > viewport.height + 80 || particle.life > particle.maxLife) Object.assign(particle, createParticle(Math.floor(Math.random() * 1000)));
+
+    const isOutsideViewport = particle.x < -80
+      || particle.x > viewport.width + 80
+      || particle.y < -80
+      || particle.y > viewport.height + 80;
+
+    if (isOutsideViewport || particle.life > particle.maxLife) {
+      Object.assign(particle, createParticle(Math.floor(Math.random() * 1000)));
+    }
+  }
+
+
+  // ---------------------------------------------------------------------------
+  // Core and glow rendering
+  // ---------------------------------------------------------------------------
+
+  function drawParticleHead(particle, time, intensity, color, pulse) {
+    const last = particle.history[particle.history.length - 1];
+    const headSize = 2 + Math.abs(trailNoise(particle.seed + time * 1.6)) * 3.8;
+
+    context.shadowBlur = 15 + headSize * 2.2 + pulse * 10;
+    context.shadowColor = `rgba(${color},${.8 * intensity})`;
+    context.fillStyle = `rgba(${color},${Math.min(1, .98 * intensity)})`;
+    context.save();
+    context.translate(last.x, last.y);
+    context.rotate(particle.angle);
+    context.fillRect(-headSize * 1.4, -headSize * .35, headSize * 2.8, headSize * .7);
+    context.restore();
+    context.shadowBlur = 0;
   }
 
   function drawParticle(particle, time) {
@@ -167,6 +251,7 @@
     context.lineJoin = "miter";
     context.lineCap = "square";
     const last = particle.history[particle.history.length - 1];
+
     for (let point = 1; point < particle.history.length; point += 1) {
       const age = point / (particle.history.length - 1);
       const previous = particle.history[point - 1];
@@ -186,22 +271,16 @@
       context.lineTo(midX, midY);
       context.lineTo(current.x, current.y);
       context.stroke();
+
       if (length > 5 && point % 4 === 0) drawBranch(context, midX, midY, angle + trailNoise(seed) * .9, 10 + length * 1.5, 2, .11 * intensity, seed, time);
     }
+
     for (let branch = 0, count = 2 + Math.floor(Math.abs(trailNoise(particle.seed + time * .16)) * 2); branch < count; branch += 1) {
       const offset = (branch - (count - 1) / 2) * .64 + trailNoise(particle.seed + branch * 3.7 + time) * .28;
       drawBranch(context, last.x, last.y, particle.angle + offset, 24 + Math.abs(trailNoise(particle.seed * 2.4 + branch + time)) * 46, 2, .22 * intensity, particle.seed + branch * 4.3 + time * .2);
     }
-    const headSize = 2 + Math.abs(trailNoise(particle.seed + time * 1.6)) * 3.8;
-    context.shadowBlur = 15 + headSize * 2.2 + pulse * 10;
-    context.shadowColor = `rgba(${color},${.8 * intensity})`;
-    context.fillStyle = `rgba(${color},${Math.min(1, .98 * intensity)})`;
-    context.save();
-    context.translate(last.x, last.y);
-    context.rotate(particle.angle);
-    context.fillRect(-headSize * 1.4, -headSize * .35, headSize * 2.8, headSize * .7);
-    context.restore();
-    context.shadowBlur = 0;
+
+    drawParticleHead(particle, time, intensity, color, pulse);
   }
 
   function drawGlow(particle, time) {
@@ -217,15 +296,21 @@
     glowContext.lineWidth = 2.4 + pulse * 2.4;
     glowContext.beginPath();
     glowContext.moveTo(particle.history[0].x, particle.history[0].y);
+
     for (let point = 1; point < particle.history.length; point += 4) {
       const previous = particle.history[point - 1];
       const current = particle.history[point];
       const angle = Math.atan2(current.y - previous.y, current.x - previous.x);
       const warp = trailNoise(particle.seed + point * 1.83 + Math.floor(time * 5)) * (4 + point / particle.history.length * 13);
-      glowContext.lineTo(current.x + Math.cos(angle + Math.PI / 2) * warp, current.y + Math.sin(angle + Math.PI / 2) * warp);
+      glowContext.lineTo(
+        current.x + Math.cos(angle + Math.PI / 2) * warp,
+        current.y + Math.sin(angle + Math.PI / 2) * warp
+      );
     }
+
     glowContext.stroke();
     if (particle.history.length < 24 || pulse < .025) return;
+
     const count = 4 + Math.floor(state.density * 2);
     for (let branch = 0; branch < count; branch += 1) {
       const index = Math.min(particle.history.length - 4, 10 + Math.floor(branch * Math.max(1, particle.history.length - 20) / Math.max(1, count - 1)));
@@ -239,6 +324,23 @@
     }
   }
 
+
+  // ---------------------------------------------------------------------------
+  // Animation loop and browser events
+  // ---------------------------------------------------------------------------
+
+  function fadeGlowCanvas(hardReset) {
+    glowContext.globalCompositeOperation = "source-over";
+
+    if (hardReset) {
+      glowContext.clearRect(0, 0, viewport.width, viewport.height);
+      return;
+    }
+
+    glowContext.fillStyle = "rgba(2,2,2,.24)";
+    glowContext.fillRect(0, 0, viewport.width, viewport.height);
+  }
+
   function drawFrame(timestamp) {
     const seconds = timestamp / 1000;
     if (!state.lastTime) state.lastTime = seconds;
@@ -246,24 +348,36 @@
     state.lastTime = seconds;
     state.scrollBoost = Math.max(0, state.scrollBoost - delta * 2.4);
     const motion = 1 + state.scrollBoost * 2.4;
+
     if (!state.particles.length) resetParticles();
     if (state.elapsed === 0) state.resetTrails = true;
+
     state.elapsed += delta * state.speed * motion;
     const time = state.elapsed;
     const hardReset = paintBase(time);
-    glowContext.globalCompositeOperation = "source-over";
-    if (hardReset) glowContext.clearRect(0, 0, viewport.width, viewport.height);
-    else { glowContext.fillStyle = "rgba(2,2,2,.24)"; glowContext.fillRect(0, 0, viewport.width, viewport.height); }
-    for (const particle of state.particles) { updateParticle(particle, time, delta * motion); drawGlow(particle, time); drawParticle(particle, time); }
+
+    fadeGlowCanvas(hardReset);
+    for (const particle of state.particles) {
+      updateParticle(particle, time, delta * motion);
+      drawGlow(particle, time);
+      drawParticle(particle, time);
+    }
+
     requestAnimationFrame(drawFrame);
   }
 
-  addEventListener("resize", resizeCanvas);
-  addEventListener("scroll", () => {
+  function handleScroll() {
     const distance = Math.abs(scrollY - state.lastScrollY);
     state.lastScrollY = scrollY;
+
+    // Scrolling briefly accelerates particles, then drawFrame eases the boost
+    // back to zero so idle motion remains calm.
     state.scrollBoost = Math.min(5, state.scrollBoost + Math.min(2.6, distance * .012));
-  }, { passive: true });
+  }
+
+  addEventListener("resize", resizeCanvas);
+  addEventListener("scroll", handleScroll, { passive: true });
+
   resizeCanvas();
   requestAnimationFrame(drawFrame);
 })();

@@ -1,5 +1,44 @@
+/**
+ * Shared application state and event-list controllers.
+ *
+ * Script ownership:
+ * - event-data.js parses and validates external values.
+ * - event-rendering.js owns cards, calendars, and dialogs.
+ * - event-loader.js coordinates the cache and spreadsheet request.
+ * - app-startup.js attaches browser events and starts the application.
+ *
+ * These are classic scripts rather than ES modules so index.html continues to
+ * work when opened directly through file://. Scripts load sequentially, while
+ * initialization is deferred until every shared declaration is available.
+ */
+
+// -----------------------------------------------------------------------------
+// Configuration and shared state
+// -----------------------------------------------------------------------------
+
 const SHEET_URL = "https://docs.google.com/spreadsheets/d/1x_Kh3BFTKyPbOROTVhJjXCurGtGAq78nZQFckgYVeZc/export?format=xlsx";
 const EVENT_CACHE_KEY = "ouems-events-cache-v1";
+const REQUIRED_SHEET_COLUMNS = ["name", "date", "time", "accepted"];
+const SHEET_HEADERS = {
+  name: "name of event",
+  // "promoter" is the historical internal field name. The interface presents
+  // this value as "Organizer" to match the language used by event submitters.
+  promoter: "organization",
+  description: ["description", "desciption"],
+  lineup: "lineup",
+  date: "date",
+  time: "start time",
+  endTime: "end time",
+  cost: "cost",
+  photo: "poster",
+  genre: "genre",
+  venue: "venue",
+  ticketUrl: "ticket url",
+  minimumAge: "minimum age",
+  signupUrl: "sign up link",
+  accepted: "accepted"
+};
+
 const OXFORD_TERMS = [
   { name: "Michaelmas", zeroWeekStart: "2026-10-04", start: "2026-10-11", end: "2026-12-05" },
   { name: "Hilary", zeroWeekStart: "2027-01-10", start: "2027-01-17", end: "2027-03-13" },
@@ -23,9 +62,31 @@ const OXFORD_TERMS = [
   { name: "Hilary", zeroWeekStart: "2033-01-09", start: "2033-01-16", end: "2033-03-12" },
   { name: "Trinity", zeroWeekStart: "2033-04-17", start: "2033-04-24", end: "2033-06-18" }
 ];
-const state = { events: [], filtered: [], selectedGenres: new Set(), selectedOrganizers: new Set(), selectedVenues: new Set(), organizerLabels: new Map(), venueLabels: new Map(), loadError: false, view: "cards", month: null };
+
+const state = {
+  events: [],
+  filtered: [],
+  selectedGenres: new Set(),
+  selectedOrganizers: new Set(),
+  selectedVenues: new Set(),
+  organizerLabels: new Map(),
+  venueLabels: new Map(),
+  loadError: false,
+  view: "cards",
+  month: null,
+  page: 1,
+  pageSize: 10
+};
+
 const elements = {
   cards: document.querySelector("#cards-view"),
+  cardsPagination: document.querySelector("#cards-pagination"),
+  pageSize: document.querySelector("#page-size"),
+  previousPage: document.querySelector("#previous-page"),
+  nextPage: document.querySelector("#next-page"),
+  pageJumpForm: document.querySelector("#page-jump-form"),
+  pageJump: document.querySelector("#page-jump"),
+  pageTotal: document.querySelector("#page-total"),
   calendar: document.querySelector("#calendar-view"),
   count: document.querySelector("#event-count"),
   activeFilters: document.querySelector("#active-filters"),
@@ -46,315 +107,9 @@ const elements = {
   eventDialog: document.querySelector("#event-dialog"),
   eventDialogContent: document.querySelector("#event-dialog-content")
 };
-const customSelects = new Map();
 
-function closeCustomSelect(control) {
-  control.open = false;
-  control.menu.hidden = true;
-  control.trigger.setAttribute("aria-expanded", "false");
-  control.wrapper.classList.remove("is-open");
-}
 
-function closeCustomSelects() {
-  customSelects.forEach(closeCustomSelect);
-}
-
-function refreshCustomSelect(select) {
-  const control = customSelects.get(select);
-  if (!control) return;
-  const selected = select.options[select.selectedIndex] || select.options[0];
-  control.value.textContent = selected?.textContent || "Select...";
-  control.trigger.setAttribute("aria-label", select.getAttribute("aria-label") || selected?.textContent || "Select option");
-  control.menu.replaceChildren(...[...select.options].map((option) => {
-    const item = document.createElement("button");
-    item.type = "button";
-    item.className = "custom-select-option";
-    item.textContent = option.textContent;
-    item.disabled = option.disabled;
-    item.setAttribute("role", "option");
-    item.setAttribute("aria-selected", String(option.value === select.value));
-    item.addEventListener("click", () => {
-      select.value = option.value;
-      select.dispatchEvent(new Event("change", { bubbles: true }));
-      select.dispatchEvent(new Event("input", { bubbles: true }));
-      closeCustomSelect(control);
-      control.trigger.focus();
-    });
-    return item;
-  }));
-}
-
-function setupCustomSelect(select) {
-  const wrapper = document.createElement("div");
-  wrapper.className = "custom-select";
-  select.parentNode.insertBefore(wrapper, select);
-  wrapper.append(select);
-  select.classList.add("custom-select-native");
-  select.tabIndex = -1;
-  select.setAttribute("aria-hidden", "true");
-
-  const trigger = document.createElement("button");
-  trigger.type = "button";
-  trigger.className = "custom-select-trigger";
-  trigger.setAttribute("aria-haspopup", "listbox");
-  trigger.setAttribute("aria-expanded", "false");
-  const value = document.createElement("span");
-  value.className = "custom-select-value";
-  trigger.append(value);
-
-  const menu = document.createElement("div");
-  menu.className = "custom-select-menu";
-  menu.hidden = true;
-  menu.setAttribute("role", "listbox");
-  wrapper.append(trigger, menu);
-  const control = { select, wrapper, trigger, value, menu, open: false };
-  customSelects.set(select, control);
-  trigger.addEventListener("click", () => {
-    if (control.open) closeCustomSelect(control);
-    else {
-      closeCustomSelects();
-      control.open = true;
-      menu.hidden = false;
-      trigger.setAttribute("aria-expanded", "true");
-      wrapper.classList.add("is-open");
-    }
-  });
-  trigger.addEventListener("keydown", (event) => {
-    if (event.key === "ArrowDown" || event.key === "Enter" || event.key === " ") {
-      event.preventDefault();
-      trigger.click();
-    }
-    if (event.key === "Escape") closeCustomSelect(control);
-  });
-  select.addEventListener("change", () => refreshCustomSelect(select));
-  refreshCustomSelect(select);
-}
-
-function setupCustomSelects() {
-  [elements.genre, elements.organizer, elements.venue, elements.sort, elements.startMode, elements.endMode].forEach(setupCustomSelect);
-}
-
-function driveImageSource(value) {
-  const text = String(value || "").trim();
-  const match = text.match(/(?:id=|\/d\/)([a-zA-Z0-9_-]+)/);
-  const id = match?.[1] || (/^[a-zA-Z0-9_-]{20,}$/.test(text) ? text : "");
-  return id ? `https://drive.google.com/uc?export=view&id=${id}` : text;
-}
-
-function driveImageUrl(value) {
-  const source = driveImageSource(value);
-  return source.includes("drive.google.com/")
-    ? `https://wsrv.nl/?url=${encodeURIComponent(source)}&w=1600&q=85`
-    : source;
-}
-
-function minutesFromTime(value) {
-  if (typeof value === "number") return Math.round(value * 24 * 60) % 1440;
-  const text = String(value || "").trim().toLowerCase();
-  const match = text.match(/^(\d{1,2})\s*[:.]\s*(\d{2})\s*(am|pm)?$/) || text.match(/^(\d{1,2})\s*(am|pm)$/);
-  if (!match) return null;
-  let hours = Number(match[1]);
-  const minutes = Number(match[2] || 0);
-  if (minutes > 59 || hours > 23 || (match[3] && hours > 12)) return null;
-  if (match[3]) hours = (hours % 12) + (match[3] === "pm" ? 12 : 0);
-  return hours * 60 + minutes;
-}
-
-function formatClock(minutes) {
-  const normalized = ((Math.round(minutes) % 1440) + 1440) % 1440;
-  return `${String(Math.floor(normalized / 60)).padStart(2, "0")}.${String(normalized % 60).padStart(2, "0")}`;
-}
-
-function eventTime(event) {
-  const start = minutesFromTime(event.time);
-  const end = minutesFromTime(event.endTime);
-  return start !== null && end !== null ? `${formatClock(start)}–${formatClock(end)}` : start !== null ? formatClock(start) : "Time TBA";
-}
-
-function eventEndMinutes(event) {
-  return minutesFromTime(event.endTime);
-}
-
-function matchesTimeBoundary(eventTime, boundary, mode) {
-  if (boundary === null) return true;
-  if (eventTime === null) return false;
-  return mode === "before" ? eventTime <= boundary : eventTime >= boundary;
-}
-
-function excelDate(value) {
-  if (typeof value === "number" && window.XLSX) {
-    const parsed = XLSX.SSF.parse_date_code(value);
-    if (parsed) return `${parsed.y}-${String(parsed.m).padStart(2, "0")}-${String(parsed.d).padStart(2, "0")}`;
-  }
-  const parsed = new Date(value);
-  return Number.isNaN(parsed.getTime()) ? "" : parsed.toISOString().slice(0, 10);
-}
-
-function excelTime(value) {
-  if (typeof value === "number") {
-    const minutes = Math.round(value * 24 * 60) % (24 * 60);
-    return `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
-  }
-  return String(value || "").trim();
-}
-
-function headerIndex(headers, label) {
-  const labels = Array.isArray(label) ? label : [label];
-  const normalized = headers.map((header) => String(header).toLowerCase().trim());
-  const exact = normalized.findIndex((header) => labels.includes(header));
-  if (exact >= 0) return exact;
-  return normalized.findIndex((header) => labels.some((candidate) => header.includes(candidate)));
-}
-
-function rowValue(row, index, fallback = "") {
-  return index >= 0 && row[index] !== undefined && row[index] !== null ? row[index] : fallback;
-}
-
-function normalizeRows(rows) {
-  if (!rows.length) return [];
-  const headers = rows[0].map((header) => String(header).trim());
-  const index = {
-    name: headerIndex(headers, "name of event"),
-    promoter: headerIndex(headers, "organization"),
-    description: headerIndex(headers, ["description", "desciption"]),
-    lineup: headerIndex(headers, "lineup"),
-    date: headerIndex(headers, "date"),
-    time: headerIndex(headers, "start time"),
-    endTime: headerIndex(headers, "end time"),
-    cost: headerIndex(headers, "cost"),
-    photo: headerIndex(headers, "poster"),
-    genre: headerIndex(headers, "genre"),
-    venue: headerIndex(headers, "venue"),
-    ticketUrl: headerIndex(headers, "ticket url"),
-    minimumAge: headerIndex(headers, "minimum age"),
-    signupUrl: headerIndex(headers, "sign up link"),
-    accepted: headerIndex(headers, "accepted")
-  };
-  const requiredColumns = ["name", "date", "time", "accepted"];
-  const missingColumns = requiredColumns.filter((key) => index[key] < 0);
-  if (missingColumns.length) throw new Error(`Missing required sheet columns: ${missingColumns.join(", ")}`);
-  return rows.slice(1).filter((row) => rowValue(row, index.name) && String(rowValue(row, index.accepted)).trim().toLowerCase() === "yes").map((row) => ({
-    name: rowValue(row, index.name, "Untitled transmission"),
-    promoter: rowValue(row, index.promoter, "OUEMS"),
-    description: rowValue(row, index.description, "An OUEMS electronic music event."),
-    lineup: rowValue(row, index.lineup, "Lineup TBA"),
-    date: excelDate(rowValue(row, index.date)),
-    time: excelTime(rowValue(row, index.time)),
-    endTime: excelTime(rowValue(row, index.endTime)),
-    cost: costLabel(rowValue(row, index.cost)),
-    genre: rowValue(row, index.genre, "electronic"),
-    venue: rowValue(row, index.venue, "Venue TBA"),
-    ticketUrl: rowValue(row, index.ticketUrl),
-    minimumAge: rowValue(row, index.minimumAge),
-    signupUrl: rowValue(row, index.signupUrl),
-    accepted: rowValue(row, index.accepted),
-    photo: driveImageUrl(rowValue(row, index.photo)),
-    photoSource: driveImageSource(rowValue(row, index.photo))
-  }));
-}
-
-function displayDate(date) {
-  return new Intl.DateTimeFormat("en-GB", { day: "2-digit", month: "short" }).format(new Date(`${date}T12:00:00`));
-}
-
-function displayMonth(date) {
-  return new Intl.DateTimeFormat("en-GB", { month: "long", year: "numeric" }).format(date);
-}
-
-function oxfordTermForDate(dateKey) {
-  return OXFORD_TERMS.find((term) => dateKey >= term.zeroWeekStart && dateKey <= term.end) || null;
-}
-
-function oxfordTermForMonth(year, month) {
-  const monthStart = `${year}-${String(month + 1).padStart(2, "0")}-01`;
-  const monthEnd = `${year}-${String(month + 1).padStart(2, "0")}-${String(new Date(year, month + 1, 0).getDate()).padStart(2, "0")}`;
-  return OXFORD_TERMS.find((term) => term.zeroWeekStart <= monthEnd && term.end >= monthStart) || null;
-}
-
-function oxfordWeekLabel(dateKey, day) {
-  const term = oxfordTermForDate(dateKey);
-  if (!term) return String(day);
-  const daysSinceZeroWeek = Math.round((new Date(`${dateKey}T12:00:00`) - new Date(`${term.zeroWeekStart}T12:00:00`)) / 86400000);
-  return `wk${Math.floor(daysSinceZeroWeek / 7)} // ${day}`;
-}
-
-function lineupList(value) {
-  return String(value || "Lineup TBA").split(/\r?\n|[,;]+/).map((artist) => artist.trim()).filter(Boolean).map((artist) => `<span>${escapeHtml(artist)}</span>`).join("");
-}
-
-function eventGenres(value) {
-  return String(value || "").split(",").map((genre) => genre.trim().toLowerCase()).filter(Boolean);
-}
-
-function genreLabel(genre) {
-  return genre.charAt(0).toUpperCase() + genre.slice(1);
-}
-
-function organizerParts(value) {
-  return String(value || "").split(/\s+x\s+|,|\//i).map((organizer) => organizer.trim()).filter(Boolean);
-}
-
-function organizerKey(value) {
-  return String(value || "").trim().toLowerCase();
-}
-
-function costLabel(value) {
-  const text = String(value ?? "").trim();
-  return text && Number(text) === 0 ? "Free" : text || "Free / TBA";
-}
-
-function ticketUrl(value) {
-  const text = String(value || "").trim();
-  if (!text) return "";
-  try {
-    const url = new URL(text, window.location.href);
-    return ["http:", "https:"].includes(url.protocol) ? url.href : "";
-  } catch (error) {
-    return "";
-  }
-}
-
-function escapeHtml(value) {
-  return String(value ?? "").replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[character]));
-}
-
-function escapeAttribute(value) {
-  return escapeHtml(value);
-}
-
-function minimumAgeLabel(value) {
-  const text = String(value ?? "").trim();
-  if (!text) return "Age TBA";
-  const numeric = Number(text);
-  return Number.isFinite(numeric) ? `${numeric}+` : text.endsWith("+") ? text : `${text}+`;
-}
-
-function eventAction(event) {
-  if (!event) return null;
-  const signup = ticketUrl(event.signupUrl);
-  if (signup) return { url: signup, label: "Sign up", icon: "clipboard-pen-line" };
-  const tickets = ticketUrl(event.ticketUrl);
-  return tickets ? { url: tickets, label: "Tickets", icon: "ticket" } : null;
-}
-
-function readEventCache() {
-  try {
-    const cached = JSON.parse(localStorage.getItem(EVENT_CACHE_KEY) || "null");
-    if (!cached || !Array.isArray(cached.events) || !cached.events.every((event) => event && typeof event.name === "string" && typeof event.date === "string" && typeof event.time === "string")) return null;
-    return cached.events;
-  } catch (error) {
-    return null;
-  }
-}
-
-function writeEventCache(events) {
-  try {
-    localStorage.setItem(EVENT_CACHE_KEY, JSON.stringify({ events }));
-  } catch (error) {
-    console.warn("Unable to cache events", error);
-  }
-}
-
+/** Replace the dataset and rebuild every control derived from event values. */
 function applyEvents(events) {
   state.events = events;
   state.loadError = false;
@@ -364,28 +119,37 @@ function applyEvents(events) {
   applyFilters();
 }
 
+
+// -----------------------------------------------------------------------------
+// Filter options and active filter chips
+// -----------------------------------------------------------------------------
+
 function updateGenreOptions() {
   const values = new Set(state.events.flatMap((event) => eventGenres(event.genre)));
   retainKnownValues(state.selectedGenres, values);
   updateFilterOptions(elements.genre, state.selectedGenres);
 }
 
+/** Remove selected organizers that no longer exist in refreshed data. */
 function updateOrganizerOptions() {
   retainKnownValues(state.selectedOrganizers, state.organizerLabels);
   updateFilterOptions(elements.organizer, state.selectedOrganizers);
 }
 
+/** Remove selected venues that no longer exist in refreshed data. */
 function updateVenueOptions() {
   retainKnownValues(state.selectedVenues, state.venueLabels);
   updateFilterOptions(elements.venue, state.selectedVenues);
 }
 
+/** Mutate a selected-value set so it contains only currently known values. */
 function retainKnownValues(selectedValues, knownValues) {
   selectedValues.forEach((value) => {
     if (!knownValues.has(value)) selectedValues.delete(value);
   });
 }
 
+/** Disable already-selected native options and refresh their custom control. */
 function updateFilterOptions(select, selectedValues) {
   [...select.options].forEach((option) => {
     option.disabled = option.value !== "all" && selectedValues.has(option.value);
@@ -393,9 +157,26 @@ function updateFilterOptions(select, selectedValues) {
   refreshCustomSelect(select);
 }
 
+/** Rebuild the visible chips and synchronize disabled filter options. */
 function renderActiveFilters() {
+  const filters = activeFilterDescriptions();
+
+  elements.activeFilters.hidden = !filters.length;
+  elements.filterCount.hidden = !filters.length;
+  elements.filterCount.textContent = filters.length ? filters.length : "";
+  elements.activeFilters.replaceChildren(...filters.map(createFilterChip));
+
+  updateGenreOptions();
+  updateOrganizerOptions();
+  updateVenueOptions();
+  window.lucide?.createIcons();
+}
+
+/** Convert current filter state into labels and stable removal keys. */
+function activeFilterDescriptions() {
   const filters = [];
   const query = elements.search.value.trim();
+
   if (query) filters.push({ key: "search", label: `Search: ${query}` });
   state.selectedGenres.forEach((genre) => filters.push({ key: `genre:${genre}`, label: `Genre: ${genreLabel(genre)}` }));
   state.selectedOrganizers.forEach((organizer) => filters.push({ key: `organizer:${organizer}`, label: `Organizer: ${state.organizerLabels.get(organizer) || organizer}` }));
@@ -404,197 +185,108 @@ function renderActiveFilters() {
   if (elements.dateTo.value) filters.push({ key: "date-to", label: `Date to: ${elements.dateTo.value}` });
   if (elements.startTime.value) filters.push({ key: "start-time", label: `Start ${elements.startMode.value}: ${elements.startTime.value}` });
   if (elements.endTime.value) filters.push({ key: "end-time", label: `End ${elements.endMode.value}: ${elements.endTime.value}` });
-  elements.activeFilters.hidden = !filters.length;
-  elements.filterCount.hidden = !filters.length;
-  elements.filterCount.textContent = filters.length ? filters.length : "";
-  elements.activeFilters.replaceChildren(...filters.map(({ key, label }) => {
-    const button = document.createElement("button");
-    button.className = "filter-chip";
-    button.type = "button";
-    button.dataset.removeFilter = key;
-    button.setAttribute("aria-label", `Remove ${label}`);
-    const text = document.createElement("span");
-    text.textContent = label;
-    const icon = document.createElement("i");
-    icon.dataset.lucide = "x";
-    icon.setAttribute("aria-hidden", "true");
-    button.append(text, icon);
-    return button;
-  }));
-  updateGenreOptions();
-  updateOrganizerOptions();
-  updateVenueOptions();
-  window.lucide?.createIcons();
+
+  return filters;
 }
 
+/** Create one safe DOM button for removing an active filter. */
+function createFilterChip({ key, label }) {
+  const button = document.createElement("button");
+  button.className = "filter-chip";
+  button.type = "button";
+  button.dataset.removeFilter = key;
+  button.setAttribute("aria-label", `Remove ${label}`);
+
+  const text = document.createElement("span");
+  text.textContent = label;
+
+  const icon = document.createElement("i");
+  icon.dataset.lucide = "x";
+  icon.setAttribute("aria-hidden", "true");
+
+  button.append(text, icon);
+  return button;
+}
+
+/** Close the categorical filter popover and synchronize its trigger. */
 function closeFilterMenu() {
   elements.filterMenu.hidden = true;
   elements.filterToggle.setAttribute("aria-expanded", "false");
 }
 
-function syncCardSizing(card) {
-  const image = card.querySelector(".event-image");
-  const poster = image?.querySelector("img");
-  const content = card.querySelector(".event-content");
-  const description = card.querySelector(".event-description");
-  if (!image || !content || !description || !window.matchMedia("(min-width: 761px)").matches || !poster) {
-    content?.style.removeProperty("height");
-    description?.style.removeProperty("-webkit-line-clamp");
-    description?.style.removeProperty("line-clamp");
-    return;
-  }
-  const imageHeight = image.getBoundingClientRect().height;
-  if (!imageHeight) return;
-  content.style.height = `${imageHeight}px`;
-  description.style.removeProperty("-webkit-line-clamp");
-  description.style.removeProperty("line-clamp");
-  const lineHeight = Number.parseFloat(getComputedStyle(description).lineHeight);
-  if (description.scrollHeight > description.clientHeight + 1 && lineHeight > 0) {
-    const lines = String(Math.max(1, Math.floor(description.clientHeight / lineHeight)));
-    description.style.webkitLineClamp = lines;
-    description.style.lineClamp = lines;
-  }
+
+// -----------------------------------------------------------------------------
+// Filtering, sorting and view state
+// -----------------------------------------------------------------------------
+
+/** Capture the current controls as a stable filtering snapshot. */
+function currentFilterCriteria() {
+  return {
+    query: elements.search.value.trim().toLowerCase(),
+    genres: [...state.selectedGenres],
+    organizers: [...state.selectedOrganizers],
+    venues: [...state.selectedVenues],
+    dateFrom: elements.dateFrom.value,
+    dateTo: elements.dateTo.value,
+    startTime: minutesFromTime(elements.startTime.value),
+    endTime: minutesFromTime(elements.endTime.value)
+  };
 }
 
-function setupCardSizing(container = elements.cards) {
-  container.querySelectorAll(".event-card").forEach((card) => {
-    const poster = card.querySelector(".event-image img");
-    const sync = () => requestAnimationFrame(() => syncCardSizing(card));
-    poster?.addEventListener("load", sync, { once: true });
-    if (poster?.complete) sync();
-    if (window.ResizeObserver) new ResizeObserver(sync).observe(card.querySelector(".event-image"));
-    sync();
-  });
+/** Return whether one normalized event satisfies every active criterion. */
+function eventMatchesFilters(event, criteria) {
+  const matchesSearch = !criteria.query || Object.values(event).join(" ").toLowerCase().includes(criteria.query);
+  const matchesGenre = !criteria.genres.length || criteria.genres.some((genre) => eventGenres(event.genre).includes(genre));
+  const matchesOrganizer = !criteria.organizers.length || organizerParts(event.promoter).some((organizer) => criteria.organizers.includes(organizerKey(organizer)));
+  const matchesVenue = !criteria.venues.length || criteria.venues.includes(organizerKey(event.venue));
+  const matchesDate = (!criteria.dateFrom || event.date >= criteria.dateFrom) && (!criteria.dateTo || event.date <= criteria.dateTo);
+  const matchesStart = matchesTimeBoundary(minutesFromTime(event.time), criteria.startTime, elements.startMode.value);
+  const matchesEnd = matchesTimeBoundary(eventEndMinutes(event), criteria.endTime, elements.endMode.value);
+
+  return matchesSearch && matchesGenre && matchesOrganizer && matchesVenue && matchesDate && matchesStart && matchesEnd;
 }
 
-function renderCard(event, index, showTicketButton = false) {
-  const eventName = escapeHtml(event.name);
-  const promoter = escapeHtml(organizerParts(event.promoter).join(" / "));
-  const eventGenre = escapeHtml(event.genre);
-  const eventVenue = escapeHtml(event.venue);
-  const image = event.photo ? `<img src="${escapeAttribute(event.photo)}" alt="${escapeAttribute(`${event.name} event poster`)}" loading="${index === 0 ? "eager" : "lazy"}">` : "";
-  const action = eventAction(event);
-  const actionLabel = ticketUrl(event.signupUrl) ? "Sign up" : "Tickets";
-  const actionButton = showTicketButton ? action ? `<a class="event-ticket-button" href="${escapeAttribute(action.url)}" target="_blank" rel="noreferrer"><i data-lucide="${action.icon}" aria-hidden="true"></i>${action.label}</a>` : `<button class="event-ticket-button" type="button" title="${actionLabel} link not available" disabled><i data-lucide="${actionLabel === "Sign up" ? "clipboard-pen-line" : "ticket"}" aria-hidden="true"></i>${actionLabel}</button>` : "";
-  const ticketAttributes = !showTicketButton && action ? `data-ticket-index="${index}" role="link" tabindex="0" aria-label="${escapeAttribute(`Open ${action.label.toLowerCase()} for ${event.name}`)}"` : "";
-  return `<article class="event-card" ${ticketAttributes} style="animation-delay: ${index * 70}ms">
-    <div class="event-image">${image}</div>
-    <div class="event-content"><h3>${eventName}</h3><div class="event-meta"><span><i data-lucide="clock-3" aria-hidden="true"></i>${escapeHtml(eventTime(event))}</span><span><i data-lucide="map-pin" aria-hidden="true"></i>${eventVenue}</span><span><i data-lucide="ticket" aria-hidden="true"></i>${escapeHtml(event.cost)}</span><span class="event-age">${escapeHtml(minimumAgeLabel(event.minimumAge))}</span></div><div class="event-lineup"><div class="lineup-list">${lineupList(event.lineup)}</div></div><p class="event-description">${escapeHtml(event.description)}</p><div class="event-footer"><span class="event-footer-date">${escapeHtml(displayDate(event.date))}</span><span class="event-footer-genre">${eventGenre}</span><span class="event-footer-promoter" title="${escapeAttribute(event.promoter)}">${promoter}</span>${actionButton}</div></div>
-  </article>`;
+/** Compare two events using the active sort control. */
+function compareEvents(first, second) {
+  const sortValues = {
+    name: [first.name, second.name],
+    genre: [first.genre, second.genre],
+    organizer: [first.promoter, second.promoter],
+    venue: [first.venue, second.venue],
+    date: [first.date, second.date]
+  };
+  const [firstValue, secondValue] = sortValues[elements.sort.value] || sortValues.date;
+  return firstValue.localeCompare(secondValue);
 }
 
-function renderCards() {
-  elements.count.textContent = state.filtered.length;
-  if (state.filtered.length) {
-    elements.cards.innerHTML = state.filtered.map((event, index) => renderCard(event, index)).join("");
-  } else {
-    const emptyState = document.createElement("div");
-    emptyState.className = "empty-state";
-    emptyState.textContent = state.loadError ? "Unable to load events right now. Please try again later." : "No events match that signal. Try another search.";
-    elements.cards.replaceChildren(emptyState);
-  }
-  window.lucide?.createIcons();
-  setupCardSizing();
-  elements.cards.querySelectorAll("[data-ticket-index]").forEach((card) => {
-    const openTickets = () => {
-      const event = state.filtered[Number(card.dataset.ticketIndex)];
-      const url = eventAction(event)?.url;
-      if (url) window.open(url, "_blank", "noopener,noreferrer");
-    };
-    card.addEventListener("click", (event) => { if (!event.target.closest("a, button")) openTickets(); });
-    card.addEventListener("keydown", (event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openTickets(); } });
-  });
+/** Return whether criteria contain any value that narrows the event list. */
+function hasActiveFilters(criteria) {
+  return Boolean(
+    criteria.query || criteria.genres.length || criteria.organizers.length || criteria.venues.length
+    || criteria.dateFrom || criteria.dateTo || criteria.startTime !== null || criteria.endTime !== null
+  );
 }
 
-function renderCalendarEvent(event) {
-  const eventIndex = state.filtered.indexOf(event);
-  const titleClass = /\s/.test(String(event.name).trim()) ? "" : " calendar-event-title-single";
-  const eventName = escapeHtml(event.name);
-  const organizer = escapeHtml(organizerParts(event.promoter).join(" / ") || "Organizer TBA");
-  const genre = escapeHtml(event.genre || "Genre TBA");
-  const venue = escapeHtml(event.venue || "Venue TBA");
-  const time = escapeHtml(eventTime(event));
-  const age = escapeHtml(minimumAgeLabel(event.minimumAge));
-  return `<button class="calendar-event" type="button" data-event-index="${eventIndex}" aria-label="${escapeAttribute(`Open details for ${event.name}`)}"><strong class="calendar-event-title${titleClass}">${eventName}</strong><span>${organizer}</span><span class="calendar-event-genre">${genre}</span><span><i data-lucide="map-pin" aria-hidden="true"></i>${venue}</span><span><i data-lucide="clock-3" aria-hidden="true"></i>${time}</span><span>${age}</span></button>`;
-}
-
-function renderCalendar() {
-  const base = state.month || new Date();
-  const year = base.getFullYear();
-  const month = base.getMonth();
-  const firstDay = new Date(year, month, 1).getDay();
-  const offset = (firstDay + 6) % 7;
-  const daysInMonth = new Date(year, month + 1, 0).getDate();
-  const today = new Date();
-  let cells = "";
-  for (let slot = 0; slot < offset + daysInMonth; slot += 1) {
-    if (slot < offset) { cells += '<div class="calendar-day"></div>'; continue; }
-    const day = slot - offset + 1;
-    const dateKey = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-    const dayEvents = state.filtered.filter((event) => event.date === dateKey);
-    const isToday = today.getFullYear() === year && today.getMonth() === month && today.getDate() === day;
-    cells += `<div class="calendar-day current${isToday ? " today" : ""}"><span class="day-number">${oxfordWeekLabel(dateKey, day)}</span>${dayEvents.map(renderCalendarEvent).join("")}</div>`;
-  }
-  let renderedCells = offset + daysInMonth;
-  while (renderedCells % 7 !== 0) { cells += '<div class="calendar-day"></div>'; renderedCells += 1; }
-  const term = oxfordTermForMonth(year, month);
-  elements.calendar.innerHTML = `<div class="calendar-toolbar"><h3>${displayMonth(new Date(year, month, 1))}${term ? ` // ${term.name}` : ""}</h3><div class="calendar-actions"><button class="icon-button" type="button" data-month="previous" aria-label="Previous month"><i data-lucide="chevron-left"></i></button><button class="icon-button" type="button" data-month="next" aria-label="Next month"><i data-lucide="chevron-right"></i></button></div></div><div class="calendar-weekdays"><div>Mon</div><div>Tue</div><div>Wed</div><div>Thu</div><div>Fri</div><div>Sat</div><div>Sun</div></div><div class="calendar-grid">${cells}</div>`;
-  elements.calendar.querySelectorAll(".calendar-event").forEach((button) => button.addEventListener("click", () => openEventDialog(state.filtered[Number(button.dataset.eventIndex)])));
-  elements.calendar.querySelectorAll("[data-month]").forEach((button) => button.addEventListener("click", () => {
-    const nextMonth = new Date(state.month || new Date());
-    nextMonth.setMonth(nextMonth.getMonth() + (button.dataset.month === "next" ? 1 : -1));
-    state.month = nextMonth;
-    renderCalendar();
-  }));
-  window.lucide?.createIcons();
-}
-
-function openEventDialog(event) {
-  if (!event) return;
-  elements.eventDialogContent.innerHTML = renderCard(event, 0, true);
-  elements.eventDialogContent.querySelector("h3")?.setAttribute("id", "event-dialog-title");
-  elements.eventDialog.showModal();
-  window.lucide?.createIcons();
-  setupCardSizing(elements.eventDialogContent);
-}
-
-function closeEventDialog() {
-  if (elements.eventDialog.open) elements.eventDialog.close();
-}
-
+/** Filter, sort, reset pagination, and render the current event collection. */
 function applyFilters() {
-  const query = elements.search.value.trim().toLowerCase();
-  const selectedGenres = [...state.selectedGenres];
-  const selectedOrganizers = [...state.selectedOrganizers];
-  const selectedVenues = [...state.selectedVenues];
-  const dateFrom = elements.dateFrom.value;
-  const dateTo = elements.dateTo.value;
-  const startTime = minutesFromTime(elements.startTime.value);
-  const endTime = minutesFromTime(elements.endTime.value);
-  state.filtered = state.events.filter((event) => {
-    const matchesSearch = !query || Object.values(event).join(" ").toLowerCase().includes(query);
-    const matchesGenre = !selectedGenres.length || selectedGenres.some((genre) => eventGenres(event.genre).includes(genre));
-    const matchesOrganizer = !selectedOrganizers.length || organizerParts(event.promoter).some((organizer) => selectedOrganizers.includes(organizerKey(organizer)));
-    const matchesVenue = !selectedVenues.length || selectedVenues.includes(organizerKey(event.venue));
-    const matchesDate = (!dateFrom || event.date >= dateFrom) && (!dateTo || event.date <= dateTo);
-    const eventStart = minutesFromTime(event.time);
-    const eventEnd = eventEndMinutes(event);
-    const matchesStart = matchesTimeBoundary(eventStart, startTime, elements.startMode.value);
-    const matchesEnd = matchesTimeBoundary(eventEnd, endTime, elements.endMode.value);
-    return matchesSearch && matchesGenre && matchesOrganizer && matchesVenue && matchesDate && matchesStart && matchesEnd;
-  });
-  const sort = elements.sort.value;
-  state.filtered.sort((a, b) => sort === "name" ? a.name.localeCompare(b.name) : sort === "genre" ? a.genre.localeCompare(b.genre) : sort === "organizer" ? a.promoter.localeCompare(b.promoter) : sort === "venue" ? a.venue.localeCompare(b.venue) : a.date.localeCompare(b.date));
-  if (query || selectedGenres.length || selectedOrganizers.length || selectedVenues.length || dateFrom || dateTo || startTime !== null || endTime !== null) setView("cards");
+  const criteria = currentFilterCriteria();
+  state.filtered = state.events.filter((event) => eventMatchesFilters(event, criteria));
+  state.filtered.sort(compareEvents);
+  state.page = 1;
+
+  if (hasActiveFilters(criteria)) setView("cards");
+
   renderActiveFilters();
   renderCards();
   if (state.view === "calendar") renderCalendar();
 }
 
+/** Activate cards or calendar view and synchronize view buttons. */
 function setView(view) {
   state.view = view;
   elements.cards.hidden = view !== "cards";
   elements.calendar.hidden = view !== "calendar";
+  elements.cardsPagination.hidden = view !== "cards" || !state.filtered.length;
   document.querySelectorAll(".view-button").forEach((button) => {
     const active = button.dataset.view === view;
     button.classList.toggle("is-active", active);
@@ -605,6 +297,7 @@ function setView(view) {
   }
 }
 
+/** Rebuild genre options from the current normalized dataset. */
 function fillGenres() {
   elements.genre.replaceChildren(new Option("Add genre...", "all"));
   [...new Set(state.events.flatMap((event) => eventGenres(event.genre)))].sort().forEach((genre) => {
@@ -613,6 +306,7 @@ function fillGenres() {
   updateGenreOptions();
 }
 
+/** Build organizer options while preserving their original display casing. */
 function fillOrganizers() {
   state.organizerLabels.clear();
   elements.organizer.replaceChildren(new Option("Add organizer...", "all"));
@@ -629,6 +323,7 @@ function fillOrganizers() {
   updateOrganizerOptions();
 }
 
+/** Build venue options while preserving their original display casing. */
 function fillVenues() {
   state.venueLabels.clear();
   elements.venue.replaceChildren(new Option("Add venue...", "all"));
@@ -645,6 +340,7 @@ function fillVenues() {
   updateVenueOptions();
 }
 
+/** Add the selected genre, then reset and reapply the filters. */
 function addGenreFilter() {
   if (elements.genre.value === "all") return;
   state.selectedGenres.add(elements.genre.value);
@@ -652,6 +348,7 @@ function addGenreFilter() {
   applyFilters();
 }
 
+/** Add the selected organizer, then reset and reapply the filters. */
 function addOrganizerFilter() {
   if (elements.organizer.value === "all") return;
   state.selectedOrganizers.add(elements.organizer.value);
@@ -659,6 +356,7 @@ function addOrganizerFilter() {
   applyFilters();
 }
 
+/** Add the selected venue, then reset and reapply the filters. */
 function addVenueFilter() {
   if (elements.venue.value === "all") return;
   state.selectedVenues.add(elements.venue.value);
@@ -666,6 +364,7 @@ function addVenueFilter() {
   applyFilters();
 }
 
+/** Remove one filter using the stable key stored on its chip. */
 function removeFilter(key) {
   if (key === "search") elements.search.value = "";
   if (key === "date-from") elements.dateFrom.value = "";
@@ -677,57 +376,3 @@ function removeFilter(key) {
   if (key.startsWith("venue:")) state.selectedVenues.delete(key.slice(6));
   applyFilters();
 }
-
-async function loadEvents() {
-  state.loadError = false;
-  state.month = new Date();
-  const cachedEvents = readEventCache();
-  if (cachedEvents) applyEvents(cachedEvents);
-  try {
-    const response = await fetch(SHEET_URL, { cache: "no-cache" });
-    if (!response.ok) throw new Error(`Sheet request failed: ${response.status}`);
-    const workbook = XLSX.read(await response.arrayBuffer(), { type: "array" });
-    const rows = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], { header: 1, defval: "", raw: true });
-    const events = normalizeRows(rows);
-    writeEventCache(events);
-    applyEvents(events);
-  } catch (error) {
-    state.loadError = !cachedEvents;
-    const message = cachedEvents ? "Unable to refresh events; using cached data" : "Unable to load events";
-    console[cachedEvents ? "warn" : "error"](message, error);
-  }
-}
-
-document.querySelectorAll(".view-button").forEach((button) => button.addEventListener("click", () => setView(button.dataset.view)));
-elements.search.addEventListener("input", applyFilters);
-elements.genre.addEventListener("change", addGenreFilter);
-elements.organizer.addEventListener("change", addOrganizerFilter);
-elements.venue.addEventListener("change", addVenueFilter);
-elements.sort.addEventListener("change", applyFilters);
-[elements.dateFrom, elements.dateTo, elements.startMode, elements.startTime, elements.endMode, elements.endTime].forEach((input) => input.addEventListener("input", applyFilters));
-elements.activeFilters.addEventListener("click", (event) => {
-  const button = event.target.closest("[data-remove-filter]");
-  if (button) removeFilter(button.dataset.removeFilter);
-});
-elements.eventDialog.querySelector(".event-dialog-close").addEventListener("click", closeEventDialog);
-elements.eventDialog.addEventListener("click", (event) => { if (event.target === elements.eventDialog) closeEventDialog(); });
-elements.filterToggle.addEventListener("click", () => {
-  closeCustomSelects();
-  const isOpening = elements.filterMenu.hidden;
-  elements.filterMenu.hidden = !isOpening;
-  elements.filterToggle.setAttribute("aria-expanded", String(isOpening));
-});
-document.addEventListener("click", (event) => {
-  if (!event.target.closest(".filter-popover")) closeFilterMenu();
-  if (!event.target.closest(".custom-select")) closeCustomSelects();
-});
-document.addEventListener("keydown", (event) => {
-  if (event.key === "Escape") { closeFilterMenu(); closeCustomSelects(); }
-  if (event.key === "/" && document.activeElement !== elements.search) { event.preventDefault(); elements.search.focus(); }
-});
-if (window.lucide) lucide.createIcons();
-setupCustomSelects();
-loadEvents();
-window.addEventListener("pageshow", (event) => {
-  if (event.persisted) loadEvents();
-});

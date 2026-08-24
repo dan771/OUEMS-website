@@ -16,11 +16,13 @@
   <script src="https://unpkg.com/lucide@0.468.0"></script>
 </head>
 <body>
+  <!-- Decorative background layers are ignored by assistive technology. -->
   <canvas id="trail-background-glow" class="trail-background glow-layer" aria-hidden="true"></canvas>
   <canvas id="trail-background" class="trail-background" aria-hidden="true"></canvas>
   <div class="noise" aria-hidden="true"></div>
 
   <main id="top">
+    <!-- Event programme -->
     <section class="events-section" id="events" aria-labelledby="events-title">
       <div class="section-heading">
         <div>
@@ -28,19 +30,27 @@
             <img src="art/ouems-logo-transparent.png" alt="Oxford University Electronic Music Society logo">
             <p>Oxford University Electronic Music Society / Est. 2018</p>
           </div>
-          <p class="kicker"><span class="kicker-line"></span> Live programme</p>
           <h2 id="events-title">What's<br><em>on</em><span class="period">.</span></h2>
         </div>
         <div class="event-count" aria-live="polite"><strong id="event-count">--</strong><span>events<br>indexed</span></div>
       </div>
 
       <div class="controls" aria-label="Event controls">
+        <!-- View selection -->
         <div class="controls-view-row">
           <div class="view-switch" role="group" aria-label="Change event view">
-            <button class="view-button is-active" type="button" data-view="cards" aria-label="Card view" aria-pressed="true"><i data-lucide="layout-grid"></i><span>Cards</span></button>
-            <button class="view-button" type="button" data-view="calendar" aria-label="Calendar view" aria-pressed="false"><i data-lucide="calendar-days"></i><span>Calendar</span></button>
+            <button class="view-button is-active" type="button" data-view="cards" aria-label="Card view" aria-pressed="true">
+              <i data-lucide="layout-grid"></i>
+              <span>Cards</span>
+            </button>
+            <button class="view-button" type="button" data-view="calendar" aria-label="Calendar view" aria-pressed="false">
+              <i data-lucide="calendar-days"></i>
+              <span>Calendar</span>
+            </button>
           </div>
         </div>
+
+        <!-- Search, categorical filters and sorting -->
         <div class="controls-row controls-row-primary">
           <label class="search-control">
             <i data-lucide="search"></i>
@@ -49,7 +59,11 @@
             <kbd>/</kbd>
           </label>
           <div class="filter-popover">
-            <button id="filter-toggle" class="filter-button" type="button" aria-expanded="false" aria-controls="filter-menu"><i data-lucide="sliders-horizontal"></i><span>Filter</span><strong id="filter-count" hidden></strong></button>
+            <button id="filter-toggle" class="filter-button" type="button" aria-expanded="false" aria-controls="filter-menu">
+              <i data-lucide="sliders-horizontal"></i>
+              <span>Filter</span>
+              <strong id="filter-count" hidden></strong>
+            </button>
             <div id="filter-menu" class="filter-menu" hidden>
               <label class="select-control">
                 <span>Genre</span>
@@ -82,6 +96,8 @@
             </select>
           </label>
         </div>
+
+        <!-- Date and time boundaries -->
         <div class="controls-row controls-row-secondary">
           <div class="date-range-control">
             <span>Date range</span>
@@ -115,12 +131,37 @@
         <div id="active-filters" class="active-filters" hidden aria-label="Active filters"></div>
       </div>
 
-      <div class="data-note"><a href="https://docs.google.com/spreadsheets/d/1x_Kh3BFTKyPbOROTVhJjXCurGtGAq78nZQFckgYVeZc/edit?usp=sharing" target="_blank" rel="noreferrer">Submit an event <i data-lucide="arrow-up-right"></i></a></div>
+      <div class="data-note"><a href="https://forms.gle/5SbyZFmZCfyrrVZH9" target="_blank" rel="noreferrer">Submit an event <i data-lucide="arrow-up-right"></i></a></div>
 
+      <!-- JavaScript populates both views from the same filtered event list. -->
       <div id="cards-view" class="cards-view" aria-live="polite"></div>
+      <nav id="cards-pagination" class="cards-pagination" aria-label="Card pages" hidden>
+        <label class="page-size-control">
+          <span>Show</span>
+          <select id="page-size" aria-label="Events per page">
+            <option value="10">10</option>
+            <option value="25">25</option>
+            <option value="100">100</option>
+          </select>
+        </label>
+        <div class="page-navigation">
+          <button id="previous-page" class="icon-button" type="button" aria-label="Previous page"><i data-lucide="chevron-left"></i></button>
+          <form id="page-jump-form" class="page-jump-form">
+            <span>Page</span>
+            <label>
+              <span class="sr-only">Jump to page</span>
+              <input id="page-jump" type="number" min="1" inputmode="numeric" aria-label="Jump to page">
+            </label>
+            <span aria-hidden="true">/</span>
+            <span id="page-total">1</span>
+          </form>
+          <button id="next-page" class="icon-button" type="button" aria-label="Next page"><i data-lucide="chevron-right"></i></button>
+        </div>
+      </nav>
       <div id="calendar-view" class="calendar-view" hidden aria-live="polite"></div>
     </section>
 
+    <!-- Calendar event details -->
     <dialog id="event-dialog" class="event-dialog" aria-labelledby="event-dialog-title">
       <div class="event-dialog-shell">
         <button class="icon-button event-dialog-close" type="button" aria-label="Close event details"><i data-lucide="x"></i></button>
@@ -128,6 +169,7 @@
       </div>
     </dialog>
 
+    <!-- Society summary -->
     <section class="about-section" id="about" aria-labelledby="about-title">
       <div>
         <h2 id="about-title">Supporting<br><em>grassroots.</em></h2>
@@ -140,26 +182,66 @@
   <footer class="site-footer">
     <span>Oxford University Electronic Music Society</span>
     <span>Oxford, UK / Est. 2018</span>
+    <nav class="footer-social" aria-label="OUEMS social links">
+      <a href="https://instagram.com/ou.ems" target="_blank" rel="noreferrer" aria-label="OUEMS on Instagram" title="Instagram">
+        <i data-lucide="instagram" aria-hidden="true"></i><span>Instagram</span>
+      </a>
+      <a href="https://facebook.com/oxforduniems" target="_blank" rel="noreferrer" aria-label="OUEMS on Facebook" title="Facebook">
+        <i data-lucide="facebook" aria-hidden="true"></i><span>Facebook</span>
+      </a>
+      <a href="https://youtube.com/@ouems_sessions" target="_blank" rel="noreferrer" aria-label="OUEMS on YouTube" title="YouTube">
+        <i data-lucide="youtube" aria-hidden="true"></i><span>YouTube</span>
+      </a>
+      <a href="https://soundcloud.com/user-829641819" target="_blank" rel="noreferrer" aria-label="OUEMS on SoundCloud" title="SoundCloud">
+        <img class="brand-icon" src="https://cdn.simpleicons.org/soundcloud/D8FF3E" alt="" aria-hidden="true"><span>SoundCloud</span>
+      </a>
+      <a href="https://github.com/dan771/OUEMS-website" target="_blank" rel="noreferrer" aria-label="View the OUEMS website repository on GitHub" title="GitHub">
+        <i data-lucide="github" aria-hidden="true"></i><span>GitHub</span>
+      </a>
+    </nav>
   </footer>
 
   <script>
+    // A fresh query string avoids stale local assets when this page is opened
+    // directly from disk, where normal server cache headers are unavailable.
     const assetVersion = Date.now();
+
     const showAssetError = (source) => {
-      if (source !== "app.js") return;
+      // The trail animation is optional. Every other local script is part of
+      // the functional event programme and should fail visibly if unavailable.
+      if (source === "trails-background.js") return;
+
       const message = document.createElement("div");
       message.className = "empty-state";
       message.textContent = "Unable to load the event programme. Please reload the page.";
       document.querySelector("#cards-view").replaceChildren(message);
       document.querySelector("#event-count").textContent = "0";
     };
+
     const loadScript = (source, next) => {
       const script = document.createElement("script");
       script.src = `${source}?v=${assetVersion}`;
       script.onload = next;
-      script.onerror = () => { console.error(`Unable to load ${source}`); showAssetError(source); };
+      script.onerror = () => {
+        console.error(`Unable to load ${source}`);
+        showAssetError(source);
+      };
       document.body.append(script);
     };
-    loadScript("app.js", () => loadScript("trails-background.js"));
+
+    // Classic scripts are loaded in dependency order so the site also works
+    // when index.html is opened directly from disk.
+    loadScript("custom-select.js", () => {
+      loadScript("app.js", () => {
+        loadScript("event-data.js", () => {
+          loadScript("event-rendering.js", () => {
+            loadScript("event-loader.js", () => {
+              loadScript("app-startup.js", () => loadScript("trails-background.js"));
+            });
+          });
+        });
+      });
+    });
   </script>
 </body>
 </html>

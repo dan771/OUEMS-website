@@ -1,3 +1,5 @@
+/* Theme and document defaults
+  -------------------------------------------------------------------------- */
 :root {
   --black: #070707;
   --panel: #101110;
@@ -18,6 +20,8 @@ a { color: inherit; text-decoration: none; }
 button, input, select { font: inherit; }
 button, select { cursor: pointer; }
 
+/* Decorative background
+  -------------------------------------------------------------------------- */
 .noise { position: fixed; inset: 0; z-index: 5; pointer-events: none; opacity: .035; background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.8'/%3E%3C/svg%3E"); }
 .trail-background { position: fixed; inset: 0; z-index: 0; width: 100%; height: 100%; opacity: .5; pointer-events: none; }
 .trail-background.glow-layer { filter: blur(11px); opacity: .38; }
@@ -25,6 +29,8 @@ button, select { cursor: pointer; }
 main, .site-footer { position: relative; z-index: 2; }
 .site-nav svg, .data-note svg { width: 13px; height: 13px; }
 
+/* Section headings and identity
+  -------------------------------------------------------------------------- */
 .section-identity { display: flex; align-items: center; gap: 18px; margin-bottom: 46px; color: var(--muted); font-size: 10px; letter-spacing: .12em; text-transform: uppercase; }
 .section-identity img { display: block; width: 150px; height: auto; filter: drop-shadow(0 0 8px rgba(216,255,62,.16)); }
 .kicker { margin: 0 0 24px; color: var(--acid); font-size: 11px; font-weight: 600; letter-spacing: .12em; line-height: 1.3; text-transform: uppercase; }
@@ -38,6 +44,9 @@ h2 em { color: transparent; font-style: normal; -webkit-text-stroke: 1px var(--w
 h2 { font-size: clamp(58px, 8vw, 118px); }
 .event-count { display: flex; align-items: baseline; gap: 10px; margin-bottom: 8px; color: var(--muted); text-transform: uppercase; letter-spacing: .1em; font-size: 10px; line-height: 1.4; }
 .event-count strong { color: var(--white); font-family: "Archivo Black", sans-serif; font-size: 52px; font-weight: 400; letter-spacing: -.06em; }
+
+/* Search, filters and view controls
+  -------------------------------------------------------------------------- */
 .controls { display: grid; gap: 10px; padding: 10px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
 .controls-view-row { display: flex; align-items: flex-start; }
 .controls-view-row .view-switch { min-height: 46px; }
@@ -106,8 +115,24 @@ kbd { min-width: 21px; padding: 2px 5px; border: 1px solid #41443e; color: var(-
 .data-note { display: flex; align-items: center; gap: 8px; margin: 17px 0 25px; color: var(--muted); font-size: 11px; }
 .data-note a { display: inline-flex; align-items: center; gap: 4px; margin-left: auto; color: var(--acid); }
 
+/* Card list and pagination
+  -------------------------------------------------------------------------- */
 .cards-view { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; }
 .cards-view[hidden], .calendar-view[hidden] { display: none; }
+.cards-pagination { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-top: 20px; padding-top: 14px; border-top: 1px solid var(--line); }
+.cards-pagination[hidden] { display: none; }
+.page-size-control, .page-navigation, .page-jump-form { display: flex; align-items: center; gap: 8px; }
+.page-size-control > span, .page-jump-form > span { color: var(--muted); font-size: 10px; letter-spacing: .08em; text-transform: uppercase; }
+.page-size-control .custom-select { width: 66px; flex: 0 0 66px; }
+.page-size-control .custom-select-trigger { height: 34px; padding-left: 9px; font-size: 10px; }
+.page-size-control .custom-select-trigger::after { right: 8px; width: 6px; height: 6px; }
+.page-size-control .custom-select-menu { width: 100%; min-width: 0; }
+.page-navigation .icon-button { width: 34px; height: 34px; }
+.page-navigation .icon-button:disabled { cursor: not-allowed; opacity: .35; }
+.page-navigation .icon-button:disabled:hover { color: var(--white); background: transparent; }
+.page-jump-form input { width: 42px; height: 34px; padding: 0 7px; border: 1px solid var(--line); outline: 0; color: var(--acid); background: rgba(16,17,16,.72); font-size: 11px; text-align: center; appearance: textfield; }
+.page-jump-form input:focus { border-color: var(--acid); }
+.page-jump-form input::-webkit-inner-spin-button, .page-jump-form input::-webkit-outer-spin-button { margin: 0; -webkit-appearance: none; }
 .event-card { display: grid; grid-template-columns: 300px minmax(0, 1fr); border: 1px solid #30322f; background: var(--panel); overflow: hidden; animation: reveal .55s both; }
 .event-image { position: relative; align-self: start; width: 300px; overflow: hidden; background: #1b1c1a; }
 .event-image::after { content: ""; position: absolute; inset: 0; background: linear-gradient(120deg, rgba(0,0,0,.05), rgba(0,0,0,.56)); }
@@ -134,6 +159,8 @@ kbd { min-width: 21px; padding: 2px 5px; border: 1px solid #41443e; color: var(-
 .event-ticket-button:disabled:hover { color: var(--black); background: var(--acid); }
 .empty-state { grid-column: 1 / -1; padding: 60px 20px; border: 1px solid var(--line); color: var(--muted); text-align: center; }
 
+/* Calendar view and event dialog
+  -------------------------------------------------------------------------- */
 .calendar-view { border: 1px solid var(--line); background: rgba(16,17,16,.72); }
 .calendar-toolbar { display: flex; justify-content: space-between; align-items: center; padding: 18px 20px; border-bottom: 1px solid var(--line); }
 .calendar-toolbar h3 { margin: 0; font-family: "Archivo Black", sans-serif; font-weight: 400; font-size: 26px; letter-spacing: -.04em; text-transform: uppercase; }
@@ -163,6 +190,8 @@ kbd { min-width: 21px; padding: 2px 5px; border: 1px solid #41443e; color: var(-
 .event-dialog-close { position: absolute; z-index: 1; top: 24px; right: 24px; color: var(--white); background: rgba(16, 17, 16, .84); }
 .event-dialog .event-card { width: 100%; }
 
+/* About section and footer
+  -------------------------------------------------------------------------- */
 .about-section { display: flex; justify-content: center; gap: 8vw; align-items: center; padding: 100px 8vw; border-top: 1px solid var(--line); }
 .about-label { align-self: start; padding-top: 9px; color: var(--acid); font-size: 10px; letter-spacing: .12em; text-transform: uppercase; }
 .about-section h2 { font-size: clamp(50px, 6vw, 90px); }
@@ -170,8 +199,16 @@ kbd { min-width: 21px; padding: 2px 5px; border: 1px solid #41443e; color: var(-
 .about-details { display: grid; justify-items: end; gap: 12px; color: var(--muted); font-size: 10px; letter-spacing: .1em; text-align: right; text-transform: uppercase; }
 .about-logo { width: 100%; max-width: 240px; opacity: .9; filter: drop-shadow(0 0 10px rgba(216,255,62,.16)); }
 .site-footer { display: flex; justify-content: space-between; padding: 22px 8vw; border-top: 1px solid var(--line); color: var(--muted); font-size: 10px; letter-spacing: .1em; text-transform: uppercase; }
+.site-footer a { display: inline-flex; align-items: center; gap: 6px; color: var(--acid); }
+.site-footer a:hover { color: var(--white); }
+.site-footer a svg { width: 14px; height: 14px; }
+.site-footer a .brand-icon { display: block; width: 14px; height: 14px; }
+.footer-social { display: flex; flex-wrap: wrap; gap: 12px 16px; }
+.footer-social a { gap: 5px; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
 
+/* Motion and responsive layouts
+  -------------------------------------------------------------------------- */
 @keyframes reveal { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
 @media (min-width: 761px) {
   .event-content { padding: 17px 20px 14px; }
@@ -198,6 +235,8 @@ kbd { min-width: 21px; padding: 2px 5px; border: 1px solid #41443e; color: var(-
   .event-card { grid-template-columns: 1fr; grid-template-rows: auto auto; }
   .event-image { width: 100%; }
   .event-card h3 { font-size: clamp(22px, 7.5cqw, 30px); }
+  .cards-pagination { align-items: stretch; flex-direction: column; }
+  .page-size-control, .page-navigation { justify-content: space-between; }
   .calendar-view { min-width: 0; overflow: hidden; }
   .calendar-toolbar { padding: 14px 12px; }
   .calendar-toolbar h3 { min-width: 0; font-size: 20px; }
