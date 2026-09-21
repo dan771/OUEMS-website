@@ -237,6 +237,9 @@ kbd { min-width: 21px; padding: 2px 5px; border: 1px solid #41443e; color: var(-
   .event-card { grid-template-columns: 1fr; grid-template-rows: auto auto; }
   .event-image { width: 100%; }
   .event-card h3 { font-size: clamp(22px, 7.5cqw, 30px); }
+  .event-footer { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
+  .event-footer-date { grid-column: 1 / -1; }
+  .event-footer > .event-footer-genre, .event-footer > .event-footer-promoter { overflow: visible; text-align: left; text-overflow: clip; white-space: normal; overflow-wrap: anywhere; }
   .cards-pagination { align-items: stretch; flex-direction: column; }
   .page-size-control, .page-navigation { justify-content: space-between; }
   .calendar-view { min-width: 0; overflow: hidden; }
