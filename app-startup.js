@@ -54,7 +54,8 @@ function setupEventListeners() {
     elements.startMode,
     elements.startTime,
     elements.endMode,
-    elements.endTime
+    elements.endTime,
+    elements.maxPrice
   ];
   rangeInputs.forEach((input) => input.addEventListener("input", applyFilters));
 

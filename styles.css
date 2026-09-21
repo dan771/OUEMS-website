@@ -100,6 +100,8 @@ kbd { min-width: 21px; padding: 2px 5px; border: 1px solid #41443e; color: var(-
 .filter-menu[hidden] { display: none; }
 .filter-menu .select-control { width: 100%; min-width: 0; }
 .filter-menu .select-control .custom-select { min-width: 0; flex: 1 1 auto; }
+.filter-menu .input-control { width: 100%; min-width: 0; }
+.filter-menu .max-price-control input { flex: 1 1 auto; }
 .view-switch { display: flex; border: 1px solid var(--line); }
 .view-button { display: flex; gap: 7px; align-items: center; padding: 0 14px; border: 0; color: var(--muted); background: transparent; font-size: 11px; text-transform: uppercase; letter-spacing: .08em; }
 .view-button + .view-button { border-left: 1px solid var(--line); }

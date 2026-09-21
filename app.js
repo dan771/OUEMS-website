@@ -104,6 +104,7 @@ const elements = {
   startTime: document.querySelector("#start-time"),
   endMode: document.querySelector("#end-time-mode"),
   endTime: document.querySelector("#end-time"),
+  maxPrice: document.querySelector("#max-price"),
   eventDialog: document.querySelector("#event-dialog"),
   eventDialogContent: document.querySelector("#event-dialog-content")
 };
@@ -185,6 +186,7 @@ function activeFilterDescriptions() {
   if (elements.dateTo.value) filters.push({ key: "date-to", label: `Date to: ${elements.dateTo.value}` });
   if (elements.startTime.value) filters.push({ key: "start-time", label: `Start ${elements.startMode.value}: ${elements.startTime.value}` });
   if (elements.endTime.value) filters.push({ key: "end-time", label: `End ${elements.endMode.value}: ${elements.endTime.value}` });
+  if (elements.maxPrice.value) filters.push({ key: "max-price", label: `Max price: £${elements.maxPrice.value}` });
 
   return filters;
 }
@@ -229,7 +231,8 @@ function currentFilterCriteria() {
     dateFrom: elements.dateFrom.value,
     dateTo: elements.dateTo.value,
     startTime: minutesFromTime(elements.startTime.value),
-    endTime: minutesFromTime(elements.endTime.value)
+    endTime: minutesFromTime(elements.endTime.value),
+    maxPrice: elements.maxPrice.value === "" ? null : Number(elements.maxPrice.value)
   };
 }
 
@@ -242,8 +245,10 @@ function eventMatchesFilters(event, criteria) {
   const matchesDate = (!criteria.dateFrom || event.date >= criteria.dateFrom) && (!criteria.dateTo || event.date <= criteria.dateTo);
   const matchesStart = matchesTimeBoundary(minutesFromTime(event.time), criteria.startTime, elements.startMode.value);
   const matchesEnd = matchesTimeBoundary(eventEndMinutes(event), criteria.endTime, elements.endMode.value);
+  const eventPrice = costAmount(event.cost);
+  const matchesMaxPrice = criteria.maxPrice === null || eventPrice !== null && eventPrice <= criteria.maxPrice;
 
-  return matchesSearch && matchesGenre && matchesOrganizer && matchesVenue && matchesDate && matchesStart && matchesEnd;
+  return matchesSearch && matchesGenre && matchesOrganizer && matchesVenue && matchesDate && matchesStart && matchesEnd && matchesMaxPrice;
 }
 
 /** Compare two events using the active sort control. */
@@ -263,7 +268,7 @@ function compareEvents(first, second) {
 function hasActiveFilters(criteria) {
   return Boolean(
     criteria.query || criteria.genres.length || criteria.organizers.length || criteria.venues.length
-    || criteria.dateFrom || criteria.dateTo || criteria.startTime !== null || criteria.endTime !== null
+    || criteria.dateFrom || criteria.dateTo || criteria.startTime !== null || criteria.endTime !== null || criteria.maxPrice !== null
   );
 }
 
@@ -371,6 +376,7 @@ function removeFilter(key) {
   if (key === "date-to") elements.dateTo.value = "";
   if (key === "start-time") elements.startTime.value = "";
   if (key === "end-time") elements.endTime.value = "";
+  if (key === "max-price") elements.maxPrice.value = "";
   if (key.startsWith("genre:")) state.selectedGenres.delete(key.slice(6));
   if (key.startsWith("organizer:")) state.selectedOrganizers.delete(key.slice(10));
   if (key.startsWith("venue:")) state.selectedVenues.delete(key.slice(6));

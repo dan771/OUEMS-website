@@ -218,6 +218,14 @@ function costLabel(value) {
   return text && Number(text) === 0 ? "Free" : text || "Free / TBA";
 }
 
+/** Return the lowest stated ticket price, or null when a cost is unknown. */
+function costAmount(value) {
+  const text = String(value || "").trim().toLowerCase();
+  if (!text || /free|no cost|donation/.test(text)) return 0;
+  const amounts = [...text.matchAll(/\d+(?:\.\d{1,2})?/g)].map((match) => Number(match[0]));
+  return amounts.length ? Math.min(...amounts) : null;
+}
+
 /** Accept only web URLs before exposing spreadsheet links to the DOM. */
 function ticketUrl(value) {
   const text = String(value || "").trim();
