@@ -10,7 +10,7 @@
 // Card rendering and responsive sizing
 // -----------------------------------------------------------------------------
 
-/** Match desktop card content to poster height and clamp overflowing copy. */
+/** Keep desktop card content at least as tall as its poster. */
 function syncCardSizing(card) {
   const image = card.querySelector(".event-image");
   const poster = image?.querySelector("img");
@@ -18,24 +18,17 @@ function syncCardSizing(card) {
   const description = card.querySelector(".event-description");
   if (!image || !content || !description || !window.matchMedia("(min-width: 761px)").matches || !poster) {
     content?.style.removeProperty("height");
-    description?.style.removeProperty("-webkit-line-clamp");
-    description?.style.removeProperty("line-clamp");
+    content?.style.removeProperty("min-height");
     return;
   }
   const imageHeight = image.getBoundingClientRect().height;
   if (!imageHeight) return;
 
-  // On desktop, cards match the content column to the poster height. Measure
-  // the remaining description space before applying a line clamp.
-  content.style.height = `${imageHeight}px`;
+  // The poster establishes a visual minimum, but longer event details must be
+  // allowed to make the card taller rather than being clipped.
+  content.style.minHeight = `${imageHeight}px`;
   description.style.removeProperty("-webkit-line-clamp");
   description.style.removeProperty("line-clamp");
-  const lineHeight = Number.parseFloat(getComputedStyle(description).lineHeight);
-  if (description.scrollHeight > description.clientHeight + 1 && lineHeight > 0) {
-    const lines = String(Math.max(1, Math.floor(description.clientHeight / lineHeight)));
-    description.style.webkitLineClamp = lines;
-    description.style.lineClamp = lines;
-  }
 }
 
 /** Observe poster dimensions and keep generated card sizing synchronized. */
