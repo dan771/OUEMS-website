@@ -76,10 +76,14 @@ kbd { min-width: 21px; padding: 2px 5px; border: 1px solid #41443e; color: var(-
 .custom-select.is-open .custom-select-trigger { border-color: var(--acid); color: var(--white); background: #1b2115; }
 .custom-select.is-open .custom-select-trigger::after { transform: translateY(-25%) rotate(225deg); }
 .custom-select-trigger:focus-visible { outline: 1px solid var(--acid); outline-offset: 2px; }
-.custom-select-menu { position: absolute; z-index: 30; top: calc(100% + 6px); left: 0; width: max(100%, 150px); min-width: 100%; padding: 4px; border: 1px solid var(--acid); background: #0b0d0b; box-shadow: 8px 8px 0 rgba(216,255,62,.12); }
+.custom-select-menu { position: absolute; z-index: 30; top: calc(100% + 6px); left: 0; width: max(100%, 150px); min-width: 100%; max-height: min(320px, 50vh); overflow-y: auto; padding: 4px; border: 1px solid var(--acid); background: #0b0d0b; box-shadow: 8px 8px 0 rgba(216,255,62,.12); }
 .custom-select-option { display: block; width: 100%; padding: 10px 11px; border: 0; border-left: 2px solid transparent; color: var(--muted); background: transparent; font-size: 11px; letter-spacing: .07em; text-align: left; text-transform: uppercase; }
+.custom-select-option[hidden] { display: none; }
 .custom-select-option[aria-selected="true"] { border-left-color: var(--acid); color: var(--black); background: var(--acid); }
 .custom-select-option:disabled { display: none; }
+.custom-select-search { position: sticky; top: 0; z-index: 1; display: block; width: 100%; margin-bottom: 4px; padding: 10px 11px; border: 1px solid #353a30; outline: 0; color: var(--white); background: #11130f; font: inherit; font-size: 11px; letter-spacing: .04em; }
+.custom-select-search:focus { border-color: var(--acid); }
+.custom-select-search::placeholder { color: var(--muted); }
 .input-control { flex: 1 1 170px; }
 .input-control .custom-select { flex: 0 0 72px; }
 .input-control .custom-select-trigger { padding: 0 18px 0 7px; font-size: 10px; letter-spacing: .04em; }
@@ -108,6 +112,7 @@ kbd { min-width: 21px; padding: 2px 5px; border: 1px solid #41443e; color: var(-
 .filter-menu .select-control .custom-select { min-width: 0; flex: 1 1 auto; }
 .filter-menu .input-control { width: 100%; min-width: 0; }
 .filter-menu .max-price-control input { flex: 1 1 auto; }
+.filter-menu .reset-filters-button { display: none; width: 100%; margin-left: 0; justify-content: center; }
 .view-switch { display: flex; border: 1px solid var(--line); }
 .view-button { display: flex; gap: 7px; align-items: center; padding: 0 14px; border: 0; color: var(--muted); background: transparent; font-size: 11px; text-transform: uppercase; letter-spacing: .08em; }
 .view-button + .view-button { border-left: 1px solid var(--line); }
@@ -241,11 +246,16 @@ kbd { min-width: 21px; padding: 2px 5px; border: 1px solid #41443e; color: var(-
   h2 { font-size: clamp(42px, 13vw, 76px); }
   .event-count strong { font-size: 38px; }
   .controls { display: grid; }
+  .controls-row-primary { position: relative; padding-top: 24px; border-top: 0; }
+  .controls-row-primary::before { content: ""; position: absolute; top: 0; right: 0; left: 0; height: 1px; background: #41443e; }
   .controls-row { flex-wrap: wrap; }
-  .search-control { flex-basis: 100%; min-width: 0; }
-  .controls-row-primary .filter-popover, .controls-row-primary .sort-control { flex: 1 1 calc(50% - 5px); }
+  .controls-row-primary { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .controls-row-primary .search-control { grid-column: 1 / -1; min-width: 0; }
+  .controls-row-primary .filter-popover, .controls-row-primary .sort-control { min-width: 0; width: 100%; }
   .filter-button { width: 100%; justify-content: center; }
   .filter-menu { right: auto; left: 0; min-width: min(300px, calc(100vw - 40px)); }
+  .controls-view-row > .reset-filters-button { display: none; }
+  .filter-menu .reset-filters-button { display: inline-flex; }
   .filter-menu .select-control { flex: 1 1 auto; }
   .controls-row-secondary { display: flex; }
   .controls-row-secondary > * { flex: 1 1 100%; }

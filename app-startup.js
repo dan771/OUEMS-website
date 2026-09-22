@@ -35,6 +35,7 @@ function setupEventListeners() {
   elements.officialEventsButton.addEventListener("click", addOfficialEventsFilter);
   elements.previousEventsToggle.addEventListener("click", togglePreviousEvents);
   elements.resetFilters.addEventListener("click", resetFilters);
+  elements.resetFiltersMenu.addEventListener("click", resetFilters);
 
   elements.search.addEventListener("input", applyFilters);
   elements.genre.addEventListener("change", addGenreFilter);

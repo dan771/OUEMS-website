@@ -100,6 +100,7 @@ const elements = {
   officialEventsButton: document.querySelector("#official-events-button"),
   previousEventsToggle: document.querySelector("#previous-events-toggle"),
   resetFilters: document.querySelector("#reset-filters"),
+  resetFiltersMenu: document.querySelector("#reset-filters-menu"),
   search: document.querySelector("#search-input"),
   genre: document.querySelector("#genre-filter"),
   organizer: document.querySelector("#organizer-filter"),

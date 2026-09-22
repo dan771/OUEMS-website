@@ -7,10 +7,12 @@
  */
 
 const customSelects = new Map();
+const CUSTOM_SELECT_SEARCH_THRESHOLD = 8;
 
 /** Close one enhanced select and synchronize its accessibility state. */
 function closeCustomSelect(control) {
   control.open = false;
+  control.searchQuery = "";
   control.menu.hidden = true;
   control.trigger.setAttribute("aria-expanded", "false");
   control.wrapper.classList.remove("is-open");
@@ -35,7 +37,24 @@ function refreshCustomSelect(select) {
   control.value.textContent = selected?.textContent || "Select...";
   control.trigger.setAttribute("aria-label", select.getAttribute("aria-label") || selected?.textContent || "Select option");
 
-  const optionButtons = [...select.options].map((option) => {
+  const options = [...select.options];
+  const hasSearch = options.length > CUSTOM_SELECT_SEARCH_THRESHOLD;
+  const search = hasSearch ? document.createElement("input") : null;
+  if (search) {
+    search.type = "search";
+    search.className = "custom-select-search";
+    search.placeholder = options[0]?.textContent || "Search options...";
+    search.setAttribute("aria-label", `Search ${select.getAttribute("aria-label") || "options"}`);
+    search.value = control.searchQuery || "";
+    search.addEventListener("input", () => {
+      control.searchQuery = search.value.trim().toLowerCase();
+      control.menu.querySelectorAll(".custom-select-option").forEach((item) => {
+        item.hidden = control.searchQuery && !item.textContent.toLowerCase().includes(control.searchQuery);
+      });
+    });
+  }
+
+  const optionButtons = options.filter((option, index) => !hasSearch || index > 0).map((option) => {
     const item = document.createElement("button");
     item.type = "button";
     item.className = "custom-select-option";
@@ -43,6 +62,7 @@ function refreshCustomSelect(select) {
     item.disabled = option.disabled;
     item.setAttribute("role", "option");
     item.setAttribute("aria-selected", String(option.value === select.value));
+    item.hidden = Boolean(control.searchQuery && !option.textContent.toLowerCase().includes(control.searchQuery));
 
     item.addEventListener("click", () => {
       select.value = option.value;
@@ -55,7 +75,7 @@ function refreshCustomSelect(select) {
     return item;
   });
 
-  control.menu.replaceChildren(...optionButtons);
+  control.menu.replaceChildren(...(search ? [search] : []), ...optionButtons);
 }
 
 /** Enhance one native select with the site's custom trigger and listbox. */
@@ -86,7 +106,7 @@ function setupCustomSelect(select) {
   menu.setAttribute("role", "listbox");
   wrapper.append(trigger, menu);
 
-  const control = { select, wrapper, trigger, value, menu, open: false };
+  const control = { select, wrapper, trigger, value, menu, open: false, searchQuery: "" };
   customSelects.set(select, control);
 
   trigger.addEventListener("click", () => {
@@ -96,10 +116,12 @@ function setupCustomSelect(select) {
     }
 
     closeCustomSelects();
+    refreshCustomSelect(select);
     control.open = true;
     menu.hidden = false;
     trigger.setAttribute("aria-expanded", "true");
     wrapper.classList.add("is-open");
+    control.menu.querySelector(".custom-select-search")?.focus();
   });
 
   trigger.addEventListener("keydown", (event) => {
