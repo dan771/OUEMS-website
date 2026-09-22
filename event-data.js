@@ -153,7 +153,7 @@ function normalizeRows(rows) {
 // -----------------------------------------------------------------------------
 
 function displayDate(date) {
-  return new Intl.DateTimeFormat("en-GB", { day: "2-digit", month: "short" }).format(new Date(`${date}T12:00:00`));
+  return new Intl.DateTimeFormat("en-GB", { weekday: "short", day: "2-digit", month: "short" }).format(new Date(`${date}T12:00:00`));
 }
 
 function displayMonth(date) {
