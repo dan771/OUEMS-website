@@ -53,6 +53,17 @@ function renderEventImage(event, index) {
   return `<img src="${source}" alt="${alt}" loading="${loading}">`;
 }
 
+/** Render a ticket link over the poster and as a full-width label beneath it. */
+function renderPosterTicket(event, index, action) {
+  const poster = renderEventImage(event, index);
+  if (!poster || !action) return `<div class="event-image">${poster}</div>`;
+
+  return `<div class="event-image"><a class="event-poster-ticket" href="${escapeAttribute(action.url)}" target="_blank" rel="noreferrer">
+    ${poster}
+    <span class="event-poster-ticket-label"><i data-lucide="${action.icon}" aria-hidden="true"></i>${action.label}</span>
+  </a></div>`;
+}
+
 /** Render the time, venue, cost, and age metadata row. */
 function renderEventMeta(event) {
   return `<div class="event-meta">
@@ -89,11 +100,12 @@ function renderCard(event, index, showTicketButton = false, eventIndex = index) 
   const promoter = escapeHtml(organizerParts(event.promoter).join(" / "));
   const eventGenre = escapeHtml(event.genre);
   const action = eventAction(event);
-  const actionButton = showTicketButton ? renderTicketButton(event, action) : "";
+  const posterTicket = showTicketButton && action && event.photo;
+  const actionButton = showTicketButton && !posterTicket ? renderTicketButton(event, action) : "";
   const ticketAttributes = cardTicketAttributes(event, action, eventIndex, showTicketButton);
 
   return `<article class="event-card" ${ticketAttributes} style="animation-delay: ${index * 70}ms">
-    <div class="event-image">${renderEventImage(event, index)}</div>
+    ${posterTicket ? renderPosterTicket(event, index, action) : `<div class="event-image">${renderEventImage(event, index)}</div>`}
     <div class="event-content">
       <h3>${eventName}</h3>
       ${renderEventMeta(event)}

@@ -119,6 +119,7 @@ function setupCustomSelects() {
   [
     elements.genre,
     elements.organizer,
+    elements.artist,
     elements.venue,
     elements.sort,
     elements.startMode,

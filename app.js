@@ -68,14 +68,18 @@ const state = {
   filtered: [],
   selectedGenres: new Set(),
   selectedOrganizers: new Set(),
+  selectedArtists: new Set(),
   selectedVenues: new Set(),
   organizerLabels: new Map(),
+  artistLabels: new Map(),
   venueLabels: new Map(),
   loadError: false,
   view: "cards",
   month: null,
   page: 1,
-  pageSize: 10
+  pageSize: 10,
+  initialUrlFiltersApplied: false,
+  showPrevious: false
 };
 
 const elements = {
@@ -93,9 +97,13 @@ const elements = {
   filterToggle: document.querySelector("#filter-toggle"),
   filterCount: document.querySelector("#filter-count"),
   filterMenu: document.querySelector("#filter-menu"),
+  officialEventsButton: document.querySelector("#official-events-button"),
+  previousEventsToggle: document.querySelector("#previous-events-toggle"),
+  resetFilters: document.querySelector("#reset-filters"),
   search: document.querySelector("#search-input"),
   genre: document.querySelector("#genre-filter"),
   organizer: document.querySelector("#organizer-filter"),
+  artist: document.querySelector("#artist-filter"),
   venue: document.querySelector("#venue-filter"),
   sort: document.querySelector("#sort-select"),
   dateFrom: document.querySelector("#date-from"),
@@ -116,8 +124,39 @@ function applyEvents(events) {
   state.loadError = false;
   fillGenres();
   fillOrganizers();
+  fillArtists();
   fillVenues();
+  applyInitialUrlFilters();
   applyFilters();
+}
+
+/** Apply supported URL filters once, after the event options are available. */
+function applyInitialUrlFilters() {
+  if (state.initialUrlFiltersApplied) return;
+  state.initialUrlFiltersApplied = true;
+
+  const params = new URLSearchParams(window.location.search);
+  const firstParam = (...names) => names.map((name) => params.get(name)).find((value) => value !== null) || "";
+  const values = (name) => params.getAll(name).flatMap((value) => value.split(",")).map((value) => value.trim()).filter(Boolean);
+  const addKnownValues = (name, selectedValues, labels, normalize = organizerKey) => {
+    values(name).map(normalize).filter((value) => labels.has(value)).forEach((value) => selectedValues.add(value));
+  };
+
+  addKnownValues("genre", state.selectedGenres, new Map(state.events.flatMap((event) => eventGenres(event.genre).map((genre) => [genre, genre]))));
+  addKnownValues("organizer", state.selectedOrganizers, state.organizerLabels);
+  if (["1", "true", "yes"].includes(firstParam("official", "officialOnly").toLowerCase())) state.selectedOrganizers.add("ouems");
+  addKnownValues("artist", state.selectedArtists, state.artistLabels);
+  addKnownValues("venue", state.selectedVenues, state.venueLabels);
+
+  elements.search.value = firstParam("search");
+  elements.dateFrom.value = firstParam("dateFrom", "date-from");
+  elements.dateTo.value = firstParam("dateTo", "date-to");
+  elements.startMode.value = ["after", "before"].includes(firstParam("startMode", "start-time-mode")) ? firstParam("startMode", "start-time-mode") : elements.startMode.value;
+  elements.startTime.value = firstParam("startTime", "start-time");
+  elements.endMode.value = ["after", "before"].includes(firstParam("endMode", "end-time-mode")) ? firstParam("endMode", "end-time-mode") : elements.endMode.value;
+  elements.endTime.value = firstParam("endTime", "end-time");
+  elements.maxPrice.value = firstParam("maxPrice", "max-price");
+  state.showPrevious = ["1", "true", "yes"].includes(firstParam("showPrevious", "show-previous").toLowerCase());
 }
 
 
@@ -135,6 +174,12 @@ function updateGenreOptions() {
 function updateOrganizerOptions() {
   retainKnownValues(state.selectedOrganizers, state.organizerLabels);
   updateFilterOptions(elements.organizer, state.selectedOrganizers);
+}
+
+/** Remove selected artists that no longer exist in refreshed data. */
+function updateArtistOptions() {
+  retainKnownValues(state.selectedArtists, state.artistLabels);
+  updateFilterOptions(elements.artist, state.selectedArtists);
 }
 
 /** Remove selected venues that no longer exist in refreshed data. */
@@ -166,9 +211,11 @@ function renderActiveFilters() {
   elements.filterCount.hidden = !filters.length;
   elements.filterCount.textContent = filters.length ? filters.length : "";
   elements.activeFilters.replaceChildren(...filters.map(createFilterChip));
+  syncShortcutButtons();
 
   updateGenreOptions();
   updateOrganizerOptions();
+  updateArtistOptions();
   updateVenueOptions();
   window.lucide?.createIcons();
 }
@@ -181,13 +228,13 @@ function activeFilterDescriptions() {
   if (query) filters.push({ key: "search", label: `Search: ${query}` });
   state.selectedGenres.forEach((genre) => filters.push({ key: `genre:${genre}`, label: `Genre: ${genreLabel(genre)}` }));
   state.selectedOrganizers.forEach((organizer) => filters.push({ key: `organizer:${organizer}`, label: `Organizer: ${state.organizerLabels.get(organizer) || organizer}` }));
+  state.selectedArtists.forEach((artist) => filters.push({ key: `artist:${artist}`, label: `Artist: ${state.artistLabels.get(artist) || artist}` }));
   state.selectedVenues.forEach((venue) => filters.push({ key: `venue:${venue}`, label: `Venue: ${state.venueLabels.get(venue) || venue}` }));
   if (elements.dateFrom.value) filters.push({ key: "date-from", label: `Date from: ${elements.dateFrom.value}` });
   if (elements.dateTo.value) filters.push({ key: "date-to", label: `Date to: ${elements.dateTo.value}` });
   if (elements.startTime.value) filters.push({ key: "start-time", label: `Start ${elements.startMode.value}: ${elements.startTime.value}` });
   if (elements.endTime.value) filters.push({ key: "end-time", label: `End ${elements.endMode.value}: ${elements.endTime.value}` });
   if (elements.maxPrice.value) filters.push({ key: "max-price", label: `Max price: £${elements.maxPrice.value}` });
-
   return filters;
 }
 
@@ -225,8 +272,10 @@ function closeFilterMenu() {
 function currentFilterCriteria() {
   return {
     query: elements.search.value.trim().toLowerCase(),
+    showPrevious: state.showPrevious,
     genres: [...state.selectedGenres],
     organizers: [...state.selectedOrganizers],
+    artists: [...state.selectedArtists],
     venues: [...state.selectedVenues],
     dateFrom: elements.dateFrom.value,
     dateTo: elements.dateTo.value,
@@ -236,11 +285,45 @@ function currentFilterCriteria() {
   };
 }
 
+/** Keep the shareable URL synchronized with the current filter controls. */
+function syncUrlFromState() {
+  const url = new URL(window.location.href);
+  const params = url.searchParams;
+  [
+    "search", "genre", "organizer", "artist", "venue", "dateFrom", "date-from", "dateTo", "date-to",
+    "startMode", "start-time-mode", "startTime", "start-time", "endMode", "end-time-mode", "endTime", "end-time",
+    "maxPrice", "max-price", "official", "officialOnly", "showPrevious", "show-previous"
+  ].forEach((name) => params.delete(name));
+
+  const setValue = (name, value) => {
+    if (value) params.set(name, value);
+  };
+  const setValues = (name, values) => setValue(name, values.join(","));
+
+  setValue("search", elements.search.value.trim());
+  setValues("genre", [...state.selectedGenres]);
+  setValues("organizer", [...state.selectedOrganizers].map((organizer) => state.organizerLabels.get(organizer) || organizer));
+  setValues("artist", [...state.selectedArtists].map((artist) => state.artistLabels.get(artist) || artist));
+  setValues("venue", [...state.selectedVenues].map((venue) => state.venueLabels.get(venue) || venue));
+  setValue("dateFrom", elements.dateFrom.value);
+  setValue("dateTo", elements.dateTo.value);
+  setValue("startMode", elements.startTime.value ? elements.startMode.value : "");
+  setValue("startTime", elements.startTime.value);
+  setValue("endMode", elements.endTime.value ? elements.endMode.value : "");
+  setValue("endTime", elements.endTime.value);
+  setValue("maxPrice", elements.maxPrice.value);
+  setValue("showPrevious", state.showPrevious ? "true" : "");
+
+  url.search = params.toString();
+  window.history.replaceState(null, "", url);
+}
+
 /** Return whether one normalized event satisfies every active criterion. */
 function eventMatchesFilters(event, criteria) {
   const matchesSearch = !criteria.query || Object.values(event).join(" ").toLowerCase().includes(criteria.query);
   const matchesGenre = !criteria.genres.length || criteria.genres.some((genre) => eventGenres(event.genre).includes(genre));
   const matchesOrganizer = !criteria.organizers.length || organizerParts(event.promoter).some((organizer) => criteria.organizers.includes(organizerKey(organizer)));
+  const matchesArtist = !criteria.artists.length || lineupParts(event.lineup).some((artist) => criteria.artists.includes(organizerKey(artist)));
   const matchesVenue = !criteria.venues.length || criteria.venues.includes(organizerKey(event.venue));
   const matchesDate = (!criteria.dateFrom || event.date >= criteria.dateFrom) && (!criteria.dateTo || event.date <= criteria.dateTo);
   const matchesStart = matchesTimeBoundary(minutesFromTime(event.time), criteria.startTime, elements.startMode.value);
@@ -248,7 +331,14 @@ function eventMatchesFilters(event, criteria) {
   const eventPrice = costAmount(event.cost);
   const matchesMaxPrice = criteria.maxPrice === null || eventPrice !== null && eventPrice <= criteria.maxPrice;
 
-  return matchesSearch && matchesGenre && matchesOrganizer && matchesVenue && matchesDate && matchesStart && matchesEnd && matchesMaxPrice;
+  const matchesPrevious = criteria.showPrevious || !event.date || event.date >= todayDateKey();
+  return matchesSearch && matchesGenre && matchesOrganizer && matchesArtist && matchesVenue && matchesDate && matchesStart && matchesEnd && matchesMaxPrice && matchesPrevious;
+}
+
+/** Return today's local date in the same sortable format as event dates. */
+function todayDateKey() {
+  const today = new Date();
+  return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
 }
 
 /** Compare two events using the active sort control. */
@@ -267,7 +357,7 @@ function compareEvents(first, second) {
 /** Return whether criteria contain any value that narrows the event list. */
 function hasActiveFilters(criteria) {
   return Boolean(
-    criteria.query || criteria.genres.length || criteria.organizers.length || criteria.venues.length
+    criteria.query || criteria.genres.length || criteria.organizers.length || criteria.artists.length || criteria.venues.length
     || criteria.dateFrom || criteria.dateTo || criteria.startTime !== null || criteria.endTime !== null || criteria.maxPrice !== null
   );
 }
@@ -275,6 +365,7 @@ function hasActiveFilters(criteria) {
 /** Filter, sort, reset pagination, and render the current event collection. */
 function applyFilters() {
   const criteria = currentFilterCriteria();
+  syncUrlFromState();
   state.filtered = state.events.filter((event) => eventMatchesFilters(event, criteria));
   state.filtered.sort(compareEvents);
   state.page = 1;
@@ -302,6 +393,43 @@ function setView(view) {
   }
 }
 
+/** Add the OUEMS organizer to the active filters. */
+function addOfficialEventsFilter() {
+  if (!state.organizerLabels.has("ouems")) return;
+  state.selectedOrganizers.add("ouems");
+  applyFilters();
+}
+
+/** Toggle whether events dated before today are included. */
+function togglePreviousEvents() {
+  state.showPrevious = !state.showPrevious;
+  applyFilters();
+}
+
+/** Reset every filter while keeping the selected view and sort order. */
+function resetFilters() {
+  elements.search.value = "";
+  elements.dateFrom.value = "";
+  elements.dateTo.value = "";
+  elements.startMode.value = "after";
+  elements.startTime.value = "";
+  elements.endMode.value = "after";
+  elements.endTime.value = "";
+  elements.maxPrice.value = "";
+  state.selectedGenres.clear();
+  state.selectedOrganizers.clear();
+  state.selectedArtists.clear();
+  state.selectedVenues.clear();
+  state.showPrevious = false;
+  applyFilters();
+}
+
+/** Synchronize the previous-events shortcut with the filter state. */
+function syncShortcutButtons() {
+  elements.previousEventsToggle.setAttribute("aria-pressed", String(state.showPrevious));
+  elements.previousEventsToggle.classList.toggle("is-active", state.showPrevious);
+}
+
 /** Rebuild genre options from the current normalized dataset. */
 function fillGenres() {
   elements.genre.replaceChildren(new Option("Add genre...", "all"));
@@ -326,6 +454,20 @@ function fillOrganizers() {
     elements.organizer.append(option);
   });
   updateOrganizerOptions();
+}
+
+/** Build artist options from every normalized lineup. */
+function fillArtists() {
+  state.artistLabels.clear();
+  elements.artist.replaceChildren(new Option("Add artist...", "all"));
+  state.events.flatMap((event) => lineupParts(event.lineup)).forEach((artist) => {
+    const key = organizerKey(artist);
+    if (key && !state.artistLabels.has(key)) state.artistLabels.set(key, artist);
+  });
+  [...state.artistLabels.entries()].sort(([, first], [, second]) => first.localeCompare(second)).forEach(([key, artist]) => {
+    elements.artist.append(new Option(artist, key));
+  });
+  updateArtistOptions();
 }
 
 /** Build venue options while preserving their original display casing. */
@@ -361,6 +503,14 @@ function addOrganizerFilter() {
   applyFilters();
 }
 
+/** Add the selected artist, then reset and reapply the filters. */
+function addArtistFilter() {
+  if (elements.artist.value === "all") return;
+  state.selectedArtists.add(elements.artist.value);
+  elements.artist.value = "all";
+  applyFilters();
+}
+
 /** Add the selected venue, then reset and reapply the filters. */
 function addVenueFilter() {
   if (elements.venue.value === "all") return;
@@ -379,6 +529,7 @@ function removeFilter(key) {
   if (key === "max-price") elements.maxPrice.value = "";
   if (key.startsWith("genre:")) state.selectedGenres.delete(key.slice(6));
   if (key.startsWith("organizer:")) state.selectedOrganizers.delete(key.slice(10));
+  if (key.startsWith("artist:")) state.selectedArtists.delete(key.slice(7));
   if (key.startsWith("venue:")) state.selectedVenues.delete(key.slice(6));
   applyFilters();
 }

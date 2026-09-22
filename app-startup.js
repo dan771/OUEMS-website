@@ -32,10 +32,14 @@ function setupEventListeners() {
   document.querySelectorAll(".view-button").forEach((button) => {
     button.addEventListener("click", () => setView(button.dataset.view));
   });
+  elements.officialEventsButton.addEventListener("click", addOfficialEventsFilter);
+  elements.previousEventsToggle.addEventListener("click", togglePreviousEvents);
+  elements.resetFilters.addEventListener("click", resetFilters);
 
   elements.search.addEventListener("input", applyFilters);
   elements.genre.addEventListener("change", addGenreFilter);
   elements.organizer.addEventListener("change", addOrganizerFilter);
+  elements.artist.addEventListener("change", addArtistFilter);
   elements.venue.addEventListener("change", addVenueFilter);
   elements.sort.addEventListener("change", applyFilters);
 

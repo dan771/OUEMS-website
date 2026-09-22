@@ -48,6 +48,20 @@
               <span>Calendar</span>
             </button>
           </div>
+          <div class="view-actions" role="group" aria-label="Event shortcuts">
+            <button id="official-events-button" class="quick-filter-button" type="button">
+              <i data-lucide="badge-check"></i>
+              <span>OUEMS events</span>
+            </button>
+            <button id="previous-events-toggle" class="quick-filter-button" type="button" aria-pressed="false">
+              <i data-lucide="history"></i>
+              <span>Show previous</span>
+            </button>
+          </div>
+          <button id="reset-filters" class="reset-filters-button" type="button">
+            <i data-lucide="rotate-ccw"></i>
+            <span>Reset filters</span>
+          </button>
         </div>
 
         <!-- Search, categorical filters and sorting -->
@@ -75,6 +89,12 @@
                 <span>Organizer</span>
                 <select id="organizer-filter" aria-label="Add organizer filter">
                   <option value="all">Add organizer...</option>
+                </select>
+              </label>
+              <label class="select-control">
+                <span>Artist</span>
+                <select id="artist-filter" aria-label="Add artist filter">
+                  <option value="all">Add artist...</option>
                 </select>
               </label>
               <label class="select-control">

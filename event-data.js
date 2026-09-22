@@ -180,12 +180,17 @@ function oxfordWeekLabel(dateKey, day) {
 
 /** Split a free-form lineup field into escaped artist-name elements. */
 function lineupList(value) {
+  return lineupParts(value)
+    .map((artist) => `<span>${escapeHtml(artist)}</span>`)
+    .join("");
+}
+
+/** Split a free-form lineup into artist names for display and filtering. */
+function lineupParts(value) {
   return String(value || "Lineup TBA")
     .split(/\r?\n|[,;]+/)
     .map((artist) => artist.trim())
-    .filter(Boolean)
-    .map((artist) => `<span>${escapeHtml(artist)}</span>`)
-    .join("");
+    .filter(Boolean);
 }
 
 /** Return normalized genre keys used by filtering. */
