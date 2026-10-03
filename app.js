@@ -355,18 +355,8 @@ function compareEvents(first, second) {
   return firstValue.localeCompare(secondValue);
 }
 
-/** Return whether criteria contain any value that narrows the event list. */
-function hasActiveFilters(criteria) {
-  return Boolean(
-    criteria.query || criteria.genres.length || criteria.organizers.length || criteria.artists.length || criteria.venues.length
-    || criteria.dateFrom || criteria.dateTo || criteria.startTime !== null || criteria.endTime !== null || criteria.maxPrice !== null
-  );
-}
-
 /** Filter, sort, reset pagination, and render the current event collection. */
 function applyFilters() {
-  if (hasActiveFilters(currentFilterCriteria())) setView("cards");
-
   const criteria = currentFilterCriteria();
   syncUrlFromState();
   state.filtered = state.events.filter((event) => eventMatchesFilters(event, criteria));
