@@ -273,7 +273,7 @@ function closeFilterMenu() {
 function currentFilterCriteria() {
   return {
     query: elements.search.value.trim().toLowerCase(),
-    showPrevious: state.showPrevious,
+    showPrevious: state.view === "calendar" || state.showPrevious,
     genres: [...state.selectedGenres],
     organizers: [...state.selectedOrganizers],
     artists: [...state.selectedArtists],
@@ -365,13 +365,13 @@ function hasActiveFilters(criteria) {
 
 /** Filter, sort, reset pagination, and render the current event collection. */
 function applyFilters() {
+  if (hasActiveFilters(currentFilterCriteria())) setView("cards");
+
   const criteria = currentFilterCriteria();
   syncUrlFromState();
   state.filtered = state.events.filter((event) => eventMatchesFilters(event, criteria));
   state.filtered.sort(compareEvents);
   state.page = 1;
-
-  if (hasActiveFilters(criteria)) setView("cards");
 
   renderActiveFilters();
   renderCards();
@@ -381,14 +381,20 @@ function applyFilters() {
 /** Activate cards or calendar view and synchronize view buttons. */
 function setView(view) {
   state.view = view;
+  const criteria = currentFilterCriteria();
+  state.filtered = state.events.filter((event) => eventMatchesFilters(event, criteria));
+  state.filtered.sort(compareEvents);
+  state.page = 1;
   elements.cards.hidden = view !== "cards";
   elements.calendar.hidden = view !== "calendar";
   elements.cardsPagination.hidden = view !== "cards" || !state.filtered.length;
+  elements.previousEventsToggle.hidden = view === "calendar";
   document.querySelectorAll(".view-button").forEach((button) => {
     const active = button.dataset.view === view;
     button.classList.toggle("is-active", active);
     button.setAttribute("aria-pressed", String(active));
   });
+  renderCards();
   if (view === "calendar") {
     renderCalendar();
   }

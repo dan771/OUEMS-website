@@ -52,6 +52,7 @@ h2 { font-size: clamp(58px, 8vw, 118px); }
 .controls-view-row .view-switch { min-height: 46px; }
 .view-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .quick-filter-button { display: inline-flex; align-items: center; gap: 7px; min-height: 46px; padding: 0 12px; border: 1px solid var(--line); color: var(--muted); background: transparent; font-size: 10px; letter-spacing: .08em; text-transform: uppercase; }
+.quick-filter-button[hidden] { display: none; }
 .quick-filter-button svg { width: 15px; height: 15px; }
 .quick-filter-button.is-active { border-color: var(--acid); color: var(--black); background: var(--acid); }
 .reset-filters-button { display: inline-flex; align-items: center; gap: 7px; min-height: 46px; margin-left: auto; padding: 0 12px; border: 1px solid var(--line); color: var(--muted); background: transparent; font-size: 10px; letter-spacing: .08em; text-transform: uppercase; }
