@@ -25,17 +25,17 @@ async function fetchEventsFromSheet() {
 }
 
 /** Render cached data immediately and then refresh it from the spreadsheet. */
-async function loadEvents() {
+async function loadEvents(onEvents = applyEvents) {
   state.loadError = false;
   state.month = new Date();
 
   const cachedEvents = readEventCache();
-  if (cachedEvents) applyEvents(cachedEvents);
+  if (cachedEvents) onEvents(cachedEvents);
 
   try {
     const events = await fetchEventsFromSheet();
     writeEventCache(events);
-    applyEvents(events);
+    onEvents(events);
   } catch (error) {
     state.loadError = !cachedEvents;
     const message = cachedEvents

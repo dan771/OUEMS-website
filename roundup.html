@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Weekly roundup | OUEMS</title>
+  <link rel="icon" href="art/site-icon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="roundup.css">
+</head>
+<body>
+  <div class="roundup-tools">
+    <button id="roundup-export" type="button" disabled>Download PNG</button>
+    <span id="roundup-status" role="status">Loading events…</span>
+  </div>
+  <main class="roundup-preview" aria-label="Weekly roundup preview">
+    <section id="roundup-artwork" aria-labelledby="roundup-title">
+      <header class="roundup-header">
+        <div class="roundup-brand"><img src="art/ouems-logo-transparent.png" alt="OUEMS"><span>Oxford University<br>Electronic Music Society</span></div>
+        <h1 id="roundup-title">THIS WEEK</h1>
+      </header>
+      <div id="roundup-list" aria-live="polite"><p class="roundup-empty">Loading this week’s events…</p></div>
+      <footer class="roundup-footer"><strong>ouems.com</strong></footer>
+    </section>
+  </main>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+  <script src="app.js"></script>
+  <script src="event-data.js"></script>
+  <script src="event-loader.js"></script>
+  <script src="roundup.js"></script>
+</body>
+</html>
