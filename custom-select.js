@@ -37,7 +37,7 @@ function refreshCustomSelect(select) {
   control.value.textContent = selected?.textContent || "Select...";
   control.trigger.setAttribute("aria-label", select.getAttribute("aria-label") || selected?.textContent || "Select option");
 
-  const options = [...select.options];
+  const options = [...select.options].filter((option) => !option.hidden);
   const hasSearch = options.length > CUSTOM_SELECT_SEARCH_THRESHOLD;
   const search = hasSearch ? document.createElement("input") : null;
   if (search) {

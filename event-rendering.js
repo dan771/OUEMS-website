@@ -69,7 +69,7 @@ function renderEventMeta(event) {
   return `<div class="event-meta">
     <span><i data-lucide="clock-3" aria-hidden="true"></i>${escapeHtml(eventTime(event))}</span>
     <span><i data-lucide="map-pin" aria-hidden="true"></i>${escapeHtml(event.venue)}</span>
-    <span><i data-lucide="ticket" aria-hidden="true"></i>${escapeHtml(event.cost)}</span>
+    <span><i data-lucide="ticket" aria-hidden="true"></i>${escapeHtml(costLabel(event.cost))}</span>
     <span class="event-age">${escapeHtml(minimumAgeLabel(event.minimumAge))}</span>
   </div>`;
 }

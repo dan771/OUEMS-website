@@ -185,10 +185,21 @@ function lineupList(value) {
     .join("");
 }
 
-/** Split a free-form lineup into artist names for display and filtering. */
+/** Split a free-form lineup into display entries. */
 function lineupParts(value) {
   return String(value || "Lineup TBA")
     .split(/\r?\n|[,;]+/)
+    .map((artist) => artist.trim())
+    .filter(Boolean);
+}
+
+/** Extract individual artists for filters, excluding parenthetical notes. */
+function artistFilterParts(value) {
+  let text = String(value || "");
+  // Remove inner pairs first so nested notes and commas inside notes stay out.
+  while (/\([^()]*\)/.test(text)) text = text.replace(/\([^()]*\)/g, "");
+  return text
+    .split(/\r?\n|[,;]+|\bb2b\b|\bback[ -]+to[ -]+back\b|\s+x\s+|\s+vs\.?\s+/i)
     .map((artist) => artist.trim())
     .filter(Boolean);
 }
@@ -198,7 +209,7 @@ function eventGenres(value) {
   return String(value || "")
     .split(",")
     .map((genre) => genre.trim().toLowerCase())
-    .filter(Boolean);
+    .filter((genre) => genre && genre !== "tbc");
 }
 
 function genreLabel(genre) {
@@ -217,10 +228,18 @@ function organizerKey(value) {
   return String(value || "").trim().toLowerCase();
 }
 
-/** Normalize empty and numeric-zero costs into readable labels. */
+/** Use consistent GBP labels for prices, ranges, tiers, and free entry. */
 function costLabel(value) {
   const text = String(value ?? "").trim();
-  return text && Number(text) === 0 ? "Free" : text || "Free / TBA";
+  if (!text || /^(?:tba|tbc|unknown|free\s*\/\s*tba)$/i.test(text)) return "Price TBA";
+  if (/^(?:free(?: entry)?|no cost|£?\s*0(?:\.0{1,2})?)$/i.test(text)) return "Free";
+
+  // Keep qualifications such as "from", "members", or "on the door" intact.
+  if (!/^(?:£\s*)?\d+(?:\.\d{1,2})?(?:\s*[-–—/]\s*(?:£\s*)?\d+(?:\.\d{1,2})?)*$/.test(text)) return text;
+  return text.split(/\s*([-–—/])\s*/).map((part, index) => {
+    if (index % 2) return part === "/" ? " / " : "–";
+    return "£" + Number(part.replace(/£|\s/g, "")).toFixed(2);
+  }).join("");
 }
 
 /** Return the lowest stated ticket price, or null when a cost is unknown. */
@@ -253,12 +272,13 @@ function escapeAttribute(value) {
   return escapeHtml(value);
 }
 
-/** Normalize numeric and free-form age restrictions for display. */
+/** Add a plus only to numeric ages; preserve other stated restrictions. */
 function minimumAgeLabel(value) {
   const text = String(value ?? "").trim();
   if (!text) return "Age TBA";
-  const numeric = Number(text);
-  return Number.isFinite(numeric) ? `${numeric}+` : text.endsWith("+") ? text : `${text}+`;
+  if (/^(?:none|any(?: age)?|all ages|no(?: age)? restrictions?|0\+?)$/i.test(text)) return "Any age";
+  if (/^\d+\s*\+?$/.test(text)) return `${Number(text.replace("+", "").trim())}+`;
+  return text;
 }
 
 /** Prefer signup links over ticket links and return their UI metadata. */

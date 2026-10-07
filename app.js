@@ -168,25 +168,25 @@ function applyInitialUrlFilters() {
 function updateGenreOptions() {
   const values = new Set(state.events.flatMap((event) => eventGenres(event.genre)));
   retainKnownValues(state.selectedGenres, values);
-  updateFilterOptions(elements.genre, state.selectedGenres);
+  updateFilterOptions(elements.genre, state.selectedGenres, (event) => eventGenres(event.genre));
 }
 
 /** Remove selected organizers that no longer exist in refreshed data. */
 function updateOrganizerOptions() {
   retainKnownValues(state.selectedOrganizers, state.organizerLabels);
-  updateFilterOptions(elements.organizer, state.selectedOrganizers);
+  updateFilterOptions(elements.organizer, state.selectedOrganizers, (event) => organizerParts(event.promoter).map(organizerKey));
 }
 
 /** Remove selected artists that no longer exist in refreshed data. */
 function updateArtistOptions() {
   retainKnownValues(state.selectedArtists, state.artistLabels);
-  updateFilterOptions(elements.artist, state.selectedArtists);
+  updateFilterOptions(elements.artist, state.selectedArtists, (event) => artistFilterParts(event.lineup).map(organizerKey));
 }
 
 /** Remove selected venues that no longer exist in refreshed data. */
 function updateVenueOptions() {
   retainKnownValues(state.selectedVenues, state.venueLabels);
-  updateFilterOptions(elements.venue, state.selectedVenues);
+  updateFilterOptions(elements.venue, state.selectedVenues, (event) => [organizerKey(event.venue)]);
 }
 
 /** Mutate a selected-value set so it contains only currently known values. */
@@ -196,11 +196,38 @@ function retainKnownValues(selectedValues, knownValues) {
   });
 }
 
-/** Disable already-selected native options and refresh their custom control. */
-function updateFilterOptions(select, selectedValues) {
-  [...select.options].forEach((option) => {
-    option.disabled = option.value !== "all" && selectedValues.has(option.value);
+/** Count matching events once per value, across the full current result list. */
+function filterOptionCounts(events, eventValues) {
+  const counts = new Map();
+  events.forEach((event) => {
+    new Set(eventValues(event).filter(Boolean)).forEach((value) => {
+      counts.set(value, (counts.get(value) || 0) + 1);
+    });
   });
+  return counts;
+}
+
+/** Show only values in the current results, with their matching event counts. */
+function updateFilterOptions(select, selectedValues, eventValues) {
+  const counts = filterOptionCounts(state.filtered, eventValues);
+  [...select.options].forEach((option) => {
+    if (option.value === "all") return;
+    const count = counts.get(option.value) || 0;
+    option.dataset.label ??= option.textContent;
+    option.textContent = option.dataset.label + " (" + count + ")";
+    option.hidden = count === 0;
+    option.disabled = count === 0 || selectedValues.has(option.value);
+  });
+  const placeholder = [...select.options].find((option) => option.value === "all");
+  const options = [...select.options].filter((option) => option.value !== "all");
+  options.sort((first, second) =>
+    (counts.get(second.value) || 0) - (counts.get(first.value) || 0)
+      || first.dataset.label.localeCompare(second.dataset.label)
+  );
+  select.replaceChildren(...(placeholder ? [placeholder] : []), ...options);
+  // Reordering options can restore an old native selection. These controls
+  // add filters; the active selections are shown separately as chips.
+  select.value = "all";
   refreshCustomSelect(select);
 }
 
@@ -324,7 +351,7 @@ function eventMatchesFilters(event, criteria) {
   const matchesSearch = !criteria.query || Object.values(event).join(" ").toLowerCase().includes(criteria.query);
   const matchesGenre = !criteria.genres.length || criteria.genres.some((genre) => eventGenres(event.genre).includes(genre));
   const matchesOrganizer = !criteria.organizers.length || organizerParts(event.promoter).some((organizer) => criteria.organizers.includes(organizerKey(organizer)));
-  const matchesArtist = !criteria.artists.length || lineupParts(event.lineup).some((artist) => criteria.artists.includes(organizerKey(artist)));
+  const matchesArtist = !criteria.artists.length || artistFilterParts(event.lineup).some((artist) => criteria.artists.includes(organizerKey(artist)));
   const matchesVenue = !criteria.venues.length || criteria.venues.includes(organizerKey(event.venue));
   const matchesDate = (!criteria.dateFrom || event.date >= criteria.dateFrom) && (!criteria.dateTo || event.date <= criteria.dateTo);
   const matchesStart = matchesTimeBoundary(minutesFromTime(event.time), criteria.startTime, elements.startMode.value);
@@ -384,6 +411,7 @@ function setView(view) {
     button.classList.toggle("is-active", active);
     button.setAttribute("aria-pressed", String(active));
   });
+  renderActiveFilters();
   renderCards();
   if (view === "calendar") {
     renderCalendar();
@@ -457,7 +485,7 @@ function fillOrganizers() {
 function fillArtists() {
   state.artistLabels.clear();
   elements.artist.replaceChildren(new Option("Add artist...", "all"));
-  state.events.flatMap((event) => lineupParts(event.lineup)).forEach((artist) => {
+  state.events.flatMap((event) => artistFilterParts(event.lineup)).forEach((artist) => {
     const key = organizerKey(artist);
     if (key && !state.artistLabels.has(key)) state.artistLabels.set(key, artist);
   });
