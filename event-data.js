@@ -213,6 +213,7 @@ function eventGenres(value) {
 }
 
 function genreLabel(genre) {
+  if (genre.toLowerCase() === "ukg") return "UKG";
   return genre.charAt(0).toUpperCase() + genre.slice(1);
 }
 
