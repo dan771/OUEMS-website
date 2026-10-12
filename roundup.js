@@ -63,9 +63,11 @@ function fitRoundupList() {
   });
 }
 
-/** Fit the 1080 × 1350 artwork to the viewport width, preserving export dimensions. */
+/** Fit the entire artwork on screen while preserving full-size PNG exports. */
 function resizeRoundupPreview() {
-  const scale = Math.max(.01, Math.min((window.innerWidth - 24) / 1080, 1));
+  const toolsHeight = document.querySelector(".roundup-tools").getBoundingClientRect().height;
+  const availableHeight = Math.max(1, window.innerHeight - toolsHeight - 24);
+  const scale = Math.max(.01, Math.min((window.innerWidth - 24) / 1080, availableHeight / 1350, 1));
   const preview = document.querySelector(".roundup-preview");
   preview.style.width = `${1080 * scale}px`;
   preview.style.height = `${1350 * scale}px`;
