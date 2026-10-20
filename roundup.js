@@ -132,7 +132,20 @@ async function exportWeeklyRoundup() {
     fitRoundupList();
     const canvas = await window.html2canvas(document.querySelector("#roundup-artwork"), {
       width: 1080, height: 1350, scale: 1, backgroundColor: "#101110", useCORS: true,
-      onclone: (clone) => { clone.querySelector("#roundup-artwork").style.transform = "none"; }
+      onclone: (clone) => {
+        const artwork = clone.querySelector("#roundup-artwork");
+        artwork.style.transform = "none";
+        // html2canvas ignores object-fit. Give contained posters their actual
+        // painted size so it preserves the same proportions and letterboxing.
+        artwork.querySelectorAll(".roundup-poster").forEach((poster) => {
+          if (clone.defaultView.getComputedStyle(poster).objectFit !== "contain"
+            || !poster.naturalWidth || !poster.naturalHeight) return;
+          const scale = Math.min(poster.clientWidth / poster.naturalWidth,
+            poster.clientHeight / poster.naturalHeight);
+          poster.style.width = `${poster.naturalWidth * scale}px`;
+          poster.style.height = `${poster.naturalHeight * scale}px`;
+        });
+      }
     });
     const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
     if (!blob) throw new Error("Unable to create the image. Please try again.");
