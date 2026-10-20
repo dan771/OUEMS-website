@@ -46,9 +46,17 @@ function roundupEventMarkup(event) {
 /** Keep whole artist names, using the space left after the essential details. */
 function fitRoundupList() {
   document.querySelectorAll(".roundup-event-details").forEach(details => {
-    details.querySelectorAll(".roundup-event-time, .roundup-event-cost").forEach(field => {
-      field.style.fontSize = "";
-      let size = 19;
+    const single = details.closest(".roundup-events-single");
+    const fields = [...details.querySelectorAll(single ? ".roundup-event-meta > span" : ".roundup-event-time, .roundup-event-cost")];
+    fields.forEach(field => { field.style.fontSize = ""; });
+    if (single) {
+      let size = parseFloat(getComputedStyle(fields[0]).fontSize);
+      while (fields.some(field => field.scrollWidth > field.clientWidth + 1) && size > 16) {
+        size--;
+        fields.forEach(field => { field.style.fontSize = `${size}px`; });
+      }
+    } else fields.forEach(field => {
+      let size = parseFloat(getComputedStyle(field).fontSize);
       while (field.scrollWidth > field.clientWidth + 1 && size > 16) field.style.fontSize = `${--size}px`;
     });
     const lineup = details.querySelector(".roundup-event-lineup");
@@ -89,7 +97,7 @@ function renderRoundupSlide() {
   const { events, page, capacity } = roundupSlides;
   const weekly = events.slice(page * capacity, (page + 1) * capacity);
   document.querySelector("#roundup-list").innerHTML = weekly.length
-    ? `<div class="roundup-events" style="--roundup-rows: ${Math.ceil(weekly.length / 2)}">${weekly.map(roundupEventMarkup).join("")}</div>`
+    ? `<div class="roundup-events${events.length === 1 ? " roundup-events-single" : ""}" style="--roundup-rows: ${Math.ceil(weekly.length / 2)}">${weekly.map(roundupEventMarkup).join("")}</div>`
     : '<p class="roundup-empty">No events listed for the rest of this week.</p>';
   document.querySelectorAll(".roundup-poster").forEach((poster) => {
     poster.addEventListener("load", resizeRoundupPreview, { once: true });

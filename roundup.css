@@ -13,7 +13,7 @@ body { margin: 0; min-width: 320px; }
 .roundup-brand img { width: 114px; height: auto; max-height: 68px; }
 .roundup-eyebrow { color: #b0b2ab; text-transform: uppercase; letter-spacing: .12em; font-size: 14px; margin: 0 0 8px; }
 h1 { margin: 0; font-family: "Archivo Black", sans-serif; font-size: 66px; font-weight: 400; line-height: 1; letter-spacing: -.06em; }
-.roundup-range { margin: 0; color: #d8ff3e; text-align: right; font-size: 22px; text-transform: uppercase; white-space: nowrap; }
+.roundup-range { align-self: flex-end; margin: 0; color: #d8ff3e; text-align: right; font-size: 22px; text-transform: uppercase; white-space: nowrap; }
 #roundup-list { flex: 1 1 auto; min-height: 0; position: relative; }
 .roundup-events { width: 100%; height: 100%; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: repeat(var(--roundup-rows, 3), minmax(0, 1fr)); gap: 24px; }
 .roundup-event { padding-bottom: 20px; border-bottom: 1px solid #373a30; min-width: 0; min-height: 0; }
@@ -30,6 +30,20 @@ h1 { margin: 0; font-family: "Archivo Black", sans-serif; font-size: 66px; font-
 .roundup-event-lineup { margin: 12px 0 0; font-size: 17px; line-height: 1.35; overflow-wrap: anywhere; }
 .roundup-event-more { color: #d8ff3e; white-space: nowrap; }
 .roundup-event-genres { margin: 9px 0 0; font-size: 16px; color: #b0b2ab; line-height: 1.35; overflow-wrap: anywhere; }
+.roundup-events-single { grid-template-columns: minmax(0, 1fr); }
+.roundup-events-single .roundup-event { display: flex; align-items: center; padding-bottom: 0; border-bottom: 0; }
+.roundup-events-single .roundup-event.has-poster { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto; gap: 28px; align-items: stretch; }
+.roundup-events-single .roundup-poster-frame { width: 100%; height: 100%; min-height: 0; background: #0a0b0a; }
+.roundup-events-single .roundup-poster { width: 100%; height: 100%; object-fit: contain; }
+.roundup-events-single .roundup-event-details { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-content: center; column-gap: 28px; width: 100%; height: auto; max-height: 380px; }
+.roundup-events-single .roundup-event-date { grid-column: 1 / -1; grid-row: 1; font-size: 22px; margin: 0 0 12px; text-align: left; }
+.roundup-events-single .roundup-event h2 { grid-column: 1 / -1; grid-row: 2; font-size: 44px; margin: 0; }
+.roundup-events-single .roundup-event-meta { grid-column: 1 / -1; display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: baseline; gap: 24px; margin-top: 20px; padding-top: 18px; border-top: 1px solid #373a30; font-size: 24px; }
+.roundup-events-single .roundup-event-meta > span { min-width: 0; font-size: inherit; }
+.roundup-events-single .roundup-event-time { text-align: right; }
+.roundup-events-single .roundup-event-cost { text-align: right; }
+.roundup-events-single .roundup-event-lineup { grid-column: 1 / -1; font-size: 21px; margin-top: 16px; }
+.roundup-events-single .roundup-event-genres { grid-column: 1 / -1; font-size: 18px; margin-top: 10px; }
 .roundup-empty { font-size: 30px; line-height: 1.4; color: #b0b2ab; }
 .roundup-footer { flex: 0 0 auto; display: flex; justify-content: flex-end; padding-top: 18px; margin-top: 20px; border-top: 1px solid #42463a; font-size: 18px; }
 .roundup-footer strong { color: #d8ff3e; font-weight: 600; }
