@@ -96,8 +96,9 @@ function renderWeeklyRoundup(events) {
 function renderRoundupSlide() {
   const { events, page, capacity } = roundupSlides;
   const weekly = events.slice(page * capacity, (page + 1) * capacity);
+  const layout = weekly.length === 1 ? " roundup-events-single" : weekly.length === 3 ? " roundup-events-featured" : "";
   document.querySelector("#roundup-list").innerHTML = weekly.length
-    ? `<div class="roundup-events${events.length === 1 ? " roundup-events-single" : ""}" style="--roundup-rows: ${Math.ceil(weekly.length / 2)}">${weekly.map(roundupEventMarkup).join("")}</div>`
+    ? `<div class="roundup-events${layout}" style="--roundup-rows: ${Math.ceil(weekly.length / 2)}">${weekly.map(roundupEventMarkup).join("")}</div>`
     : '<p class="roundup-empty">No events listed for the rest of this week.</p>';
   document.querySelectorAll(".roundup-poster").forEach((poster) => {
     poster.addEventListener("load", resizeRoundupPreview, { once: true });
